@@ -1,330 +1,550 @@
 # Heroku Deployment Guide
 
-## Overview
+Complete guide for deploying the CiteMed Project Manager autonomous agent to Heroku.
 
-The CiteMed Project Manager Agent runs on Heroku with **TWO dynos**:
+---
 
-1. **worker** dyno - Real-time polling service (Slack/Jira monitoring)
-2. **clock** dyno - Scheduled tasks (daily standup at 9 AM, hourly SLA checks)
+## Quick Start (5 minutes)
 
-## Architecture
+### Prerequisites
 
-```
-┌─────────────────────────────────────────────────────────┐
-│  Heroku Application                                     │
-│                                                          │
-│  ┌────────────────────┐      ┌────────────────────┐    │
-│  │  Worker Dyno       │      │  Clock Dyno        │    │
-│  │  (pm_agent_service)│      │  (clock.py)        │    │
-│  ├────────────────────┤      ├────────────────────┤    │
-│  │ - Slack polling    │      │ - Daily standup    │    │
-│  │   (15s interval)   │      │   (9 AM weekdays)  │    │
-│  │ - Jira polling     │      │ - Hourly SLA check │    │
-│  │   (backup)         │      │   (business hours) │    │
-│  │ - Webhook server   │      │ - Health checks    │    │
-│  │   (Jira/Bitbucket) │      │                    │    │
-│  │ - Instant responses│      │                    │    │
-│  └────────────────────┘      └────────────────────┘    │
-│                                                          │
-│  Both dynos use Claude Code CLI (installed via npm)     │
-└─────────────────────────────────────────────────────────┘
-```
+1. **Heroku CLI** - Install: `brew install heroku/brew/heroku`
+2. **Git repository** - Ensure code is committed
+3. **Credentials ready** - Atlassian API token, Slack bot token
 
-## Prerequisites
-
-1. **Heroku CLI** installed and authenticated
-2. **Git repository** with all recent changes committed
-3. **Environment variables** ready (see below)
-
-## Deployment Steps
-
-### 1. Create Heroku App (if not exists)
+### One-Command Deploy
 
 ```bash
-# Navigate to project directory
-cd /Users/ethand320/code/citemed/project-manager
+# Login to Heroku
+heroku login
 
-# Create Heroku app
+# Create app
 heroku create citemed-pm-agent
 
-# Or use existing app
-heroku git:remote -a citemed-pm-agent
-```
+# Set environment variables
+heroku config:set \
+  ATLASSIAN_SERVICE_ACCOUNT_EMAIL="your-email@atlassian.com" \
+  ATLASSIAN_SERVICE_ACCOUNT_TOKEN="your_token_here" \
+  ATLASSIAN_CLOUD_ID="67bbfd03-b309-414f-9640-908213f80628" \
+  SLACK_BOT_TOKEN="xoxb-your-slack-token"
 
-### 2. Configure Buildpacks
-
-The app requires **TWO buildpacks** (order matters!):
-
-```bash
-# Add Node.js buildpack first (for Claude Code CLI)
-heroku buildpacks:add --index 1 heroku/nodejs
-
-# Add Python buildpack second
-heroku buildpacks:add --index 2 heroku/python
-
-# Verify buildpacks
-heroku buildpacks
-```
-
-Should output:
-```
-=== citemed-pm-agent Buildpack URLs
-1. heroku/nodejs
-2. heroku/python
-```
-
-### 3. Set Environment Variables
-
-**Required:**
-```bash
-heroku config:set ANTHROPIC_API_KEY=your_api_key_here
-heroku config:set ATLASSIAN_SERVICE_ACCOUNT_EMAIL=your_email@citemed.com
-heroku config:set ATLASSIAN_SERVICE_ACCOUNT_TOKEN=your_atlassian_token
-heroku config:set SLACK_BOT_TOKEN=xoxb-your-slack-token
-heroku config:set SLACK_BOT_USER_ID=U09BVV00XRP
-heroku config:set SLACK_CHANNEL_STANDUP=C02NW7QN1RN
-```
-
-**Optional (with defaults):**
-```bash
-heroku config:set ATLASSIAN_CLOUD_ID=67bbfd03-b309-414f-9640-908213f80628
-heroku config:set ATLASSIAN_PROJECT_KEY=ECD
-heroku config:set SLACK_POLL_INTERVAL=15
-heroku config:set BUSINESS_TIMEZONE=America/New_York
-heroku config:set BUSINESS_HOURS_START=9
-heroku config:set BUSINESS_HOURS_END=17
-```
-
-### 4. Copy Deployment Files to Root
-
-```bash
-# Copy Procfile to root
-cp deployment/heroku/Procfile ./Procfile
-
-# Copy runtime.txt to root
-cp deployment/heroku/runtime.txt ./runtime.txt
-
-# Verify package.json exists in root (for Claude Code installation)
-ls -la package.json
-```
-
-### 5. Deploy to Heroku
-
-```bash
-# Add and commit deployment files
-git add Procfile runtime.txt package.json
-git add src/pm_agent_service.py  # Updated with dynamic PORT
-git add deployment/heroku/app.json  # Updated with buildpacks
-git commit -m "Configure Heroku deployment with dual-dyno architecture"
-
-# Push to Heroku
+# Deploy
 git push heroku main
 
-# Or if using a different branch:
+# Scale worker dyno
+heroku ps:scale worker=1
+
+# Check logs
+heroku logs --tail
+```
+
+---
+
+## Detailed Setup
+
+### Step 1: Create Heroku App
+
+```bash
+# Create app with specific name
+heroku create citemed-pm-agent --region us
+
+# Or let Heroku generate name
+heroku create
+```
+
+### Step 2: Configure Add-ons
+
+```bash
+# Add scheduler (free)
+heroku addons:create scheduler:standard
+
+# Optional: Add Papertrail for log management (free tier)
+heroku addons:create papertrail:choklad
+
+# Optional: Add database if needed for future state persistence
+# heroku addons:create heroku-postgresql:hobby-dev
+```
+
+### Step 3: Set Environment Variables
+
+```bash
+# Required: Atlassian credentials
+heroku config:set ATLASSIAN_SERVICE_ACCOUNT_EMAIL="remington-cd3wmzelbd@serviceaccount.atlassian.com"
+heroku config:set ATLASSIAN_SERVICE_ACCOUNT_TOKEN="YOUR_TOKEN_HERE"
+heroku config:set ATLASSIAN_CLOUD_ID="67bbfd03-b309-414f-9640-908213f80628"
+heroku config:set ATLASSIAN_PROJECT_KEY="ECD"
+
+# Required: Slack credentials
+heroku config:set SLACK_BOT_TOKEN="xoxb-YOUR-TOKEN"
+heroku config:set SLACK_CHANNEL_STANDUP="C123ABC456"
+
+# Optional: Configuration
+heroku config:set BUSINESS_TIMEZONE="America/New_York"
+heroku config:set BUSINESS_HOURS_START="9"
+heroku config:set BUSINESS_HOURS_END="17"
+heroku config:set DRY_RUN="false"
+
+# View all config
+heroku config
+```
+
+### Step 4: Deploy Code
+
+```bash
+# Add Heroku remote (if not already added)
+heroku git:remote -a citemed-pm-agent
+
+# Deploy
+git push heroku main
+
+# Or deploy from specific branch
 git push heroku your-branch:main
 ```
 
-### 6. Scale Dynos
+### Step 5: Scale Worker Dyno
 
 ```bash
-# Enable both dynos
-heroku ps:scale worker=1 clock=1
+# Start worker dyno
+heroku ps:scale worker=1
 
-# Verify both are running
+# Check dyno status
 heroku ps
+
+# View dyno info
+heroku ps:type
 ```
 
-Should output:
-```
-=== worker (Basic): python -u src/pm_agent_service.py (1)
-worker.1: up 2024/01/05 14:30:00 -0600 (~ 1m ago)
+### Step 6: Configure Scheduled Jobs
 
-=== clock (Basic): python clock.py (1)
-clock.1: up 2024/01/05 14:30:00 -0600 (~ 1m ago)
-```
-
-### 7. Verify Deployment
+The worker dyno runs `clock.py` which handles scheduling automatically. But you can also use Heroku Scheduler for backup/redundancy:
 
 ```bash
-# Check logs for both dynos
-heroku logs --tail
+# Open scheduler dashboard
+heroku addons:open scheduler
 
-# Look for these success indicators:
-# Worker dyno:
-#   ✅ Slack polling started (interval: 15s)
-#   ✅ Jira polling started (interval: 60s)
-#   🚀 Starting webhook server on port XXXXX
-#
-# Clock dyno:
-#   ✅ Scheduler configured
-#   Next standup: 2024-01-06 09:00:00
+# Add job via UI:
+# - Command: python run_agent.py standup --notify-ethan
+# - Frequency: Daily at 9:00 AM (adjust for timezone)
 ```
 
-### 8. Test the Deployment
+**Note:** With `clock.py` running, the Heroku Scheduler is optional. The clock process handles daily standups at 9 AM ET automatically.
 
-**Test Real-Time Responses (worker dyno):**
-```bash
-# Tag the bot in Slack
-# Message: @PM Agent what's the status of ECD-862?
-# Should get instant response
-```
+---
 
-**Test Scheduled Tasks (clock dyno):**
-```bash
-# Run standup manually
-heroku run standup
-
-# Or wait for 9 AM ET on a weekday for automatic standup
-```
-
-**Test Health Endpoint:**
-```bash
-# Get the app URL
-heroku info
-
-# Check health endpoint
-curl https://citemed-pm-agent.herokuapp.com/health
-```
-
-## Buildpack Installation Details
-
-### Node.js Buildpack (First)
-- Detects `package.json`
-- Runs `npm install`
-- Installs `@anthropic-ai/claude-code` globally
-- Makes `claude` command available to Python processes
-
-### Python Buildpack (Second)
-- Detects `requirements.txt`
-- Installs Python 3.11.11 (from `runtime.txt`)
-- Installs all Python dependencies
-- Runs both worker and clock processes
-
-## File Structure
-
-```
-project-manager/
-├── Procfile              # Defines worker and clock dynos
-├── runtime.txt           # Python 3.11.11
-├── package.json          # Claude Code CLI installation
-├── requirements.txt      # Python dependencies
-├── src/
-│   └── pm_agent_service.py  # Worker dyno (real-time)
-├── clock.py              # Clock dyno (scheduled)
-└── deployment/
-    └── heroku/
-        ├── app.json      # Heroku app configuration
-        ├── Procfile      # Source of truth (copy to root)
-        └── runtime.txt   # Source of truth (copy to root)
-```
-
-## Cost Estimate
-
-- **worker dyno** (Basic): ~$7/month
-- **clock dyno** (Basic): ~$7/month
-- **Total**: ~$14/month
-
-Note: First 1000 dyno hours per month are free on Heroku's Eco plan.
-
-## Monitoring
+## Monitoring & Management
 
 ### View Logs
+
 ```bash
-# All logs
+# Tail logs in real-time
 heroku logs --tail
 
-# Worker dyno only
-heroku logs --tail --dyno worker
+# View recent logs
+heroku logs -n 500
 
-# Clock dyno only
-heroku logs --tail --dyno clock
+# Filter logs by dyno
+heroku logs --dyno worker
+
+# Search logs
+heroku logs --tail | grep "Daily Standup"
 ```
 
-### Check Dyno Status
+### Run One-Off Commands
+
 ```bash
+# Run standup manually
+heroku run python run_agent.py standup
+
+# Run SLA check
+heroku run python run_agent.py sla-check
+
+# Open Python console
+heroku run python
+
+# Run bash shell
+heroku run bash
+```
+
+### Health Checks
+
+```bash
+# Check dyno status
 heroku ps
+
+# Check app info
+heroku info
+
+# View metrics (requires paid dyno)
+heroku metrics
 ```
 
-### Restart Dynos
+### Restart & Scale
+
 ```bash
-# Restart both
+# Restart all dynos
 heroku restart
 
 # Restart specific dyno
-heroku restart worker
-heroku restart clock
+heroku restart worker.1
+
+# Scale up
+heroku ps:scale worker=2
+
+# Scale down (stop)
+heroku ps:scale worker=0
 ```
+
+---
+
+## Cost Breakdown
+
+### Free Tier Option
+- **Worker Dyno:** Free (550-1000 hours/month)
+- **Scheduler Add-on:** Free
+- **Papertrail (logs):** Free tier (50 MB/month)
+- **Total:** $0/month
+
+**Limitations:**
+- Dyno sleeps after 30 min inactivity (not ideal for scheduled tasks)
+- 550 free dyno hours/month (1000 with credit card)
+
+### Recommended: Basic Tier
+- **Basic Dyno:** $7/month (never sleeps)
+- **Scheduler Add-on:** Free
+- **Papertrail:** Free tier
+- **Total:** $7/month
+
+**Benefits:**
+- Never sleeps (critical for scheduled tasks)
+- Better for production use
+
+### Premium Option
+- **Standard-1X Dyno:** $25/month
+- **Papertrail Standard:** $7/month (1GB logs)
+- **Total:** $32/month
+
+**Benefits:**
+- Better performance
+- More memory (512MB)
+- Metrics dashboard
+
+---
+
+## Automatic Deployment from GitHub
+
+### Option 1: Heroku GitHub Integration
+
+1. **Connect GitHub repo:**
+   ```bash
+   # Via Heroku dashboard: Deploy tab → Connect to GitHub
+   ```
+
+2. **Enable automatic deploys:**
+   - Choose branch (main)
+   - Enable "Wait for CI to pass before deploy" (if using GitHub Actions)
+   - Enable "Automatic deploys"
+
+3. **Now every push to main auto-deploys!**
+
+### Option 2: GitHub Actions
+
+Create `.github/workflows/deploy.yml`:
+
+```yaml
+name: Deploy to Heroku
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: akhileshns/heroku-deploy@v3.12.12
+        with:
+          heroku_api_key: ${{ secrets.HEROKU_API_KEY }}
+          heroku_app_name: "citemed-pm-agent"
+          heroku_email: "your-email@example.com"
+```
+
+---
+
+## Environment-Specific Configuration
+
+### Development vs Production
+
+Use separate Heroku apps:
+
+```bash
+# Create staging app
+heroku create citemed-pm-agent-staging --remote staging
+
+# Create production app
+heroku create citemed-pm-agent --remote production
+
+# Deploy to staging
+git push staging main
+
+# Deploy to production
+git push production main
+```
+
+### Config Vars by Environment
+
+```bash
+# Set staging-specific vars
+heroku config:set DRY_RUN=true --app citemed-pm-agent-staging
+
+# Set production vars
+heroku config:set DRY_RUN=false --app citemed-pm-agent
+```
+
+---
 
 ## Troubleshooting
 
-### Claude Code CLI Not Found
-**Error:** `claude: command not found`
+### Issue: Worker Not Starting
+
+**Check logs:**
+```bash
+heroku logs --tail
+```
+
+**Common causes:**
+- Missing dependencies → Check `requirements.txt`
+- Python version mismatch → Check `runtime.txt`
+- Procfile syntax error → Validate `Procfile`
 
 **Solution:**
 ```bash
-# Verify buildpacks are in correct order
-heroku buildpacks
-
-# Should be: 1. nodejs, 2. python
-# If wrong, remove and re-add in correct order
-heroku buildpacks:clear
-heroku buildpacks:add heroku/nodejs
-heroku buildpacks:add heroku/python
-
-# Redeploy
-git commit --allow-empty -m "Trigger rebuild"
-git push heroku main
+heroku restart worker
 ```
 
-### Port Binding Error
-**Error:** `Web process failed to bind to $PORT within 60 seconds`
+### Issue: Scheduled Jobs Not Running
 
-**Solution:** The worker dyno is NOT a web process, it's a background worker. Make sure Procfile uses:
-```
-worker: python -u src/pm_agent_service.py
-```
-NOT:
-```
-web: python -u src/pm_agent_service.py
-```
-
-### Environment Variables Not Set
+**Check clock process:**
 ```bash
-# List all config vars
-heroku config
-
-# Set missing variable
-heroku config:set VAR_NAME=value
+heroku logs --tail | grep "Health check"
 ```
 
-### Database State Issues
+**Verify timezone:**
 ```bash
-# The SQLite databases are NOT persistent on Heroku!
-# On dyno restart, all state is lost.
-# This is OK for our use case (processed messages can be reprocessed safely)
+heroku config:get BUSINESS_TIMEZONE
 ```
+
+**Test manually:**
+```bash
+heroku run python run_agent.py standup
+```
+
+### Issue: Authentication Errors (401)
+
+**Verify credentials:**
+```bash
+heroku config | grep ATLASSIAN
+```
+
+**Test locally first:**
+```bash
+heroku config:get ATLASSIAN_SERVICE_ACCOUNT_EMAIL
+heroku config:get ATLASSIAN_SERVICE_ACCOUNT_TOKEN
+```
+
+**Update credentials:**
+```bash
+heroku config:set ATLASSIAN_SERVICE_ACCOUNT_TOKEN="new_token"
+```
+
+### Issue: Out of Memory
+
+**Check dyno size:**
+```bash
+heroku ps:type
+```
+
+**Upgrade dyno:**
+```bash
+heroku ps:type standard-1x
+```
+
+### Issue: Timeout Errors
+
+**Increase timeout in clock.py:**
+```python
+timeout=600  # 10 minutes
+```
+
+**Or split long-running tasks:**
+```bash
+# Instead of one big task, break into smaller ones
+heroku run python run_agent.py sprint-analyzer
+heroku run python run_agent.py sla-monitor
+```
+
+---
+
+## Rollback & Recovery
+
+### Rollback to Previous Release
+
+```bash
+# View releases
+heroku releases
+
+# Rollback to previous version
+heroku rollback
+
+# Rollback to specific version
+heroku rollback v42
+```
+
+### Backup & Restore
+
+```bash
+# Backup config vars
+heroku config --json > config-backup.json
+
+# Restore config vars
+cat config-backup.json | jq -r 'to_entries[] | "\(.key)=\(.value)"' | xargs heroku config:set
+```
+
+---
+
+## Security Best Practices
+
+1. **Use service account credentials** - Never use personal API tokens
+2. **Rotate tokens regularly** - Update every 90 days
+3. **Enable 2FA on Heroku account**
+4. **Use Heroku Config Vars** - Never commit secrets to git
+5. **Enable audit logging** - Track all config changes
+6. **Restrict Heroku access** - Only authorized team members
+
+---
+
+## Performance Optimization
+
+### Reduce Memory Usage
+
+```python
+# In run_agent.py, clean up after each task
+import gc
+gc.collect()
+```
+
+### Reduce API Calls
+
+```python
+# Cache Jira results
+from functools import lru_cache
+
+@lru_cache(maxsize=100)
+def get_issue(issue_key):
+    # ...
+```
+
+### Use Background Jobs
+
+For heavy tasks, consider using background job queues:
+
+```bash
+heroku addons:create heroku-redis:hobby-dev
+pip install rq  # Redis Queue
+```
+
+---
+
+## Monitoring & Alerts
+
+### Heroku Metrics (Paid Dynos)
+
+```bash
+heroku metrics --dyno worker
+```
+
+### Custom Monitoring
+
+Send metrics to external services:
+- **Datadog** - `heroku addons:create datadog`
+- **New Relic** - `heroku addons:create newrelic`
+- **Sentry** - For error tracking
+
+### Slack Alerts
+
+Already implemented in `clock.py` via `notify_error()`.
+
+---
 
 ## Next Steps After Deployment
 
-1. **Monitor first 24 hours** - Watch logs for any errors
-2. **Verify 9 AM standup** - Check Slack next weekday at 9 AM ET
-3. **Test Slack mentions** - Verify instant responses
-4. **Test Jira comments** - Tag bot in Jira, verify response
-5. **Check SLA monitoring** - Verify hourly checks run during business hours
+1. **Test standup workflow:**
+   ```bash
+   heroku run python run_agent.py standup
+   ```
 
-## Rollback
+2. **Verify Slack notifications working**
 
-If deployment fails:
+3. **Set up monitoring dashboards**
+
+4. **Document team access procedures**
+
+5. **Schedule weekly review of logs**
+
+6. **Set up PagerDuty or similar for critical alerts**
+
+---
+
+## Commands Cheat Sheet
+
 ```bash
-# Rollback to previous release
+# Deploy
+git push heroku main
+
+# Logs
+heroku logs --tail
+
+# Config
+heroku config
+heroku config:set KEY=value
+
+# Restart
+heroku restart
+
+# Run command
+heroku run <command>
+
+# Scale
+heroku ps:scale worker=1
+
+# Releases
+heroku releases
 heroku rollback
 
-# Or deploy specific commit
-git push heroku commit_sha:main --force
+# Shell access
+heroku run bash
+
+# Open app dashboard
+heroku open
+heroku addons:open papertrail
+heroku addons:open scheduler
 ```
 
-## Support
+---
 
-- **Heroku Dashboard:** https://dashboard.heroku.com/apps/citemed-pm-agent
-- **Logs:** `heroku logs --tail`
-- **Debug:** `heroku run bash` (opens shell in dyno)
+## Support & Resources
+
+- **Heroku Docs:** https://devcenter.heroku.com/
+- **Heroku Status:** https://status.heroku.com/
+- **Support:** `heroku help` or https://help.heroku.com/
+
+**Internal Resources:**
+- `.claude/FUTURE_WORK.md` - Roadmap and improvements
+- `run_agent.py` - Main entrypoint
+- `clock.py` - Scheduler process
+- `BOT_INTEGRATION_SUMMARY.md` - Architecture overview
+
+---
+
+**Last Updated:** 2025-10-21
+**Status:** ✅ Ready for deployment
