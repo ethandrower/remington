@@ -1,0 +1,488 @@
+#!/usr/bin/env python3
+"""
+Jira CLI - Atlassian Jira API Utility
+Backup tool for when Atlassian MCP is unavailable.
+
+Usage:
+  ./jira-cli issue get ECD-123
+  ./jira-cli issue create --project ECD --type Story --summary "My Story"
+  ./jira-cli issue update ECD-123 --assignee john@example.com
+  ./jira-cli subtask create --parent ECD-123 --summary "Subtask"
+  ./jira-cli comment add ECD-123 "This is a comment"
+  ./jira-cli search "project = ECD AND status = 'In Progress'"
+  ./jira-cli transition ECD-123 "Done"
+  ./jira-cli user search john@example.com
+"""
+
+import os
+import sys
+import json
+import argparse
+import requests
+from base64 import b64encode
+from pathlib import Path
+from typing import Optional, Dict, Any, List
+from dotenv import load_dotenv
+
+class JiraClient:
+    """Jira API client for REST operations."""
+
+    def __init__(self, email: str, token: str, cloud_id: str):
+        self.email = email
+        self.token = token
+        self.cloud_id = cloud_id
+        self.base_url = "https://citemed.atlassian.net/rest/api/3"
+
+        # Create Basic Auth header
+        auth_str = f"{email}:{token}"
+        auth_bytes = auth_str.encode('ascii')
+        auth_b64 = b64encode(auth_bytes).decode('ascii')
+
+        self.headers = {
+            "Authorization": f"Basic {auth_b64}",
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+
+    def _request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
+        """Make HTTP request to Jira API."""
+        url = f"{self.base_url}/{endpoint}"
+        response = requests.request(method, url, headers=self.headers, **kwargs)
+        return response
+
+    def get_issue(self, issue_key: str) -> Dict[str, Any]:
+        """Get issue details."""
+        response = self._request("GET", f"issue/{issue_key}")
+        response.raise_for_status()
+        return response.json()
+
+    def search_issues(self, jql: str, fields: Optional[List[str]] = None, max_results: int = 50) -> Dict[str, Any]:
+        """Search issues using JQL."""
+        params = {
+            "jql": jql,
+            "maxResults": max_results
+        }
+        if fields:
+            params["fields"] = ",".join(fields)
+
+        response = self._request("POST", "search/jql", json=params)
+        response.raise_for_status()
+        return response.json()
+
+    def create_issue(self, project_key: str, issue_type: str, summary: str,
+                    description: Optional[str] = None, **extra_fields) -> Dict[str, Any]:
+        """Create a new issue."""
+        fields = {
+            "project": {"key": project_key},
+            "issuetype": {"name": issue_type},
+            "summary": summary
+        }
+
+        if description:
+            fields["description"] = {
+                "type": "doc",
+                "version": 1,
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [{"type": "text", "text": description}]
+                    }
+                ]
+            }
+
+        # Add extra fields
+        fields.update(extra_fields)
+
+        payload = {"fields": fields}
+        response = self._request("POST", "issue", json=payload)
+        response.raise_for_status()
+        return response.json()
+
+    def create_subtask(self, parent_key: str, summary: str, description: Optional[str] = None) -> Dict[str, Any]:
+        """Create a subtask under a parent issue."""
+        # Get parent to determine project
+        parent = self.get_issue(parent_key)
+        project_key = parent['fields']['project']['key']
+
+        fields = {
+            "project": {"key": project_key},
+            "parent": {"key": parent_key},
+            "issuetype": {"name": "Sub-task"},
+            "summary": summary
+        }
+
+        if description:
+            fields["description"] = {
+                "type": "doc",
+                "version": 1,
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [{"type": "text", "text": description}]
+                    }
+                ]
+            }
+
+        payload = {"fields": fields}
+        response = self._request("POST", "issue", json=payload)
+        response.raise_for_status()
+        return response.json()
+
+    def update_issue(self, issue_key: str, **fields) -> None:
+        """Update issue fields."""
+        payload = {"fields": fields}
+        response = self._request("PUT", f"issue/{issue_key}", json=payload)
+        response.raise_for_status()
+
+    def add_comment(self, issue_key: str, comment_text: str, mention_users: Optional[List[str]] = None) -> Dict[str, Any]:
+        """Add a comment to an issue."""
+        content = [
+            {
+                "type": "paragraph",
+                "content": [{"type": "text", "text": comment_text}]
+            }
+        ]
+
+        # Add user mentions if provided
+        if mention_users:
+            for user_id in mention_users:
+                content.insert(0, {
+                    "type": "paragraph",
+                    "content": [
+                        {
+                            "type": "mention",
+                            "attrs": {"id": user_id}
+                        }
+                    ]
+                })
+
+        payload = {
+            "body": {
+                "type": "doc",
+                "version": 1,
+                "content": content
+            }
+        }
+
+        response = self._request("POST", f"issue/{issue_key}/comment", json=payload)
+        response.raise_for_status()
+        return response.json()
+
+    def transition_issue(self, issue_key: str, transition_name: str) -> None:
+        """Transition issue to a new status."""
+        # Get available transitions
+        response = self._request("GET", f"issue/{issue_key}/transitions")
+        response.raise_for_status()
+        transitions = response.json()['transitions']
+
+        # Find matching transition
+        transition_id = None
+        for trans in transitions:
+            if trans['name'].lower() == transition_name.lower():
+                transition_id = trans['id']
+                break
+
+        if not transition_id:
+            available = [t['name'] for t in transitions]
+            raise ValueError(f"Transition '{transition_name}' not found. Available: {available}")
+
+        # Execute transition
+        payload = {"transition": {"id": transition_id}}
+        response = self._request("POST", f"issue/{issue_key}/transitions", json=payload)
+        response.raise_for_status()
+
+    def search_users(self, query: str) -> List[Dict[str, Any]]:
+        """Search for users by email or name."""
+        response = self._request("GET", f"user/search?query={query}")
+        response.raise_for_status()
+        return response.json()
+
+    def get_project(self, project_key: str) -> Dict[str, Any]:
+        """Get project details."""
+        response = self._request("GET", f"project/{project_key}")
+        response.raise_for_status()
+        return response.json()
+
+
+def format_issue(issue: Dict[str, Any], verbose: bool = False) -> str:
+    """Format issue for display."""
+    key = issue['key']
+    fields = issue['fields']
+    summary = fields.get('summary', 'N/A')
+    status = fields.get('status', {}).get('name', 'N/A')
+    assignee = fields.get('assignee', {})
+    assignee_name = assignee.get('displayName', 'Unassigned') if assignee else 'Unassigned'
+
+    output = f"{key}: {summary}\n"
+    output += f"  Status: {status} | Assignee: {assignee_name}\n"
+
+    if verbose:
+        issue_type = fields.get('issuetype', {}).get('name', 'N/A')
+        priority = fields.get('priority', {})
+        priority_name = priority.get('name', 'N/A') if priority else 'N/A'
+        created = fields.get('created', 'N/A')
+        updated = fields.get('updated', 'N/A')
+
+        output += f"  Type: {issue_type} | Priority: {priority_name}\n"
+        output += f"  Created: {created} | Updated: {updated}\n"
+
+        description = fields.get('description', {})
+        if description:
+            output += f"  Description: [truncated]\n"
+
+    return output
+
+
+def cmd_issue_get(client: JiraClient, args):
+    """Get issue details."""
+    issue = client.get_issue(args.issue_key)
+    print(format_issue(issue, verbose=True))
+
+    if args.json:
+        print("\n" + json.dumps(issue, indent=2))
+
+
+def cmd_issue_create(client: JiraClient, args):
+    """Create a new issue."""
+    result = client.create_issue(
+        project_key=args.project,
+        issue_type=args.type,
+        summary=args.summary,
+        description=args.description
+    )
+
+    issue_key = result['key']
+    print(f"✓ Created {issue_key}")
+    print(f"  URL: https://citemed.atlassian.net/browse/{issue_key}")
+
+
+def cmd_issue_update(client: JiraClient, args):
+    """Update an issue."""
+    fields = {}
+
+    if args.assignee:
+        # Look up user
+        users = client.search_users(args.assignee)
+        if users:
+            fields['assignee'] = {'accountId': users[0]['accountId']}
+        else:
+            print(f"Warning: User '{args.assignee}' not found")
+
+    if args.summary:
+        fields['summary'] = args.summary
+
+    if args.description:
+        fields['description'] = {
+            "type": "doc",
+            "version": 1,
+            "content": [
+                {"type": "paragraph", "content": [{"type": "text", "text": args.description}]}
+            ]
+        }
+
+    if fields:
+        client.update_issue(args.issue_key, **fields)
+        print(f"✓ Updated {args.issue_key}")
+    else:
+        print("No fields specified to update")
+
+
+def cmd_subtask_create(client: JiraClient, args):
+    """Create a subtask."""
+    result = client.create_subtask(
+        parent_key=args.parent,
+        summary=args.summary,
+        description=args.description
+    )
+
+    issue_key = result['key']
+    print(f"✓ Created subtask {issue_key} under {args.parent}")
+    print(f"  URL: https://citemed.atlassian.net/browse/{issue_key}")
+
+
+def cmd_comment_add(client: JiraClient, args):
+    """Add a comment to an issue."""
+    mention_users = []
+    if args.mention:
+        for email in args.mention:
+            users = client.search_users(email)
+            if users:
+                mention_users.append(users[0]['accountId'])
+
+    result = client.add_comment(args.issue_key, args.comment, mention_users)
+    print(f"✓ Added comment to {args.issue_key}")
+
+
+def cmd_search(client: JiraClient, args):
+    """Search issues with JQL."""
+    results = client.search_issues(args.jql, max_results=args.max_results)
+
+    # Handle both 'total' and 'totalSize' for compatibility
+    total = results.get('total', results.get('totalSize', 0))
+    issues = results.get('issues', results.get('values', []))
+
+    print(f"Found {total} issues (showing {len(issues)}):\n")
+
+    for issue in issues:
+        print(format_issue(issue, verbose=args.verbose))
+
+
+def cmd_transition(client: JiraClient, args):
+    """Transition an issue."""
+    client.transition_issue(args.issue_key, args.transition)
+    print(f"✓ Transitioned {args.issue_key} to '{args.transition}'")
+
+
+def cmd_user_search(client: JiraClient, args):
+    """Search for users."""
+    users = client.search_users(args.query)
+
+    print(f"Found {len(users)} users:\n")
+    for user in users:
+        print(f"  {user.get('displayName')} ({user.get('emailAddress')})")
+        print(f"    Account ID: {user.get('accountId')}")
+        print()
+
+
+def main():
+    """Main CLI entrypoint."""
+    parser = argparse.ArgumentParser(
+        description="Jira CLI - Atlassian API utility",
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+
+    subparsers = parser.add_subparsers(dest='command', help='Commands')
+
+    # Issue commands
+    issue_parser = subparsers.add_parser('issue', help='Issue operations')
+    issue_subparsers = issue_parser.add_subparsers(dest='subcommand')
+
+    # issue get
+    get_parser = issue_subparsers.add_parser('get', help='Get issue details')
+    get_parser.add_argument('issue_key', help='Issue key (e.g., ECD-123)')
+    get_parser.add_argument('--json', action='store_true', help='Output full JSON')
+
+    # issue create
+    create_parser = issue_subparsers.add_parser('create', help='Create a new issue')
+    create_parser.add_argument('--project', required=True, help='Project key')
+    create_parser.add_argument('--type', required=True, help='Issue type (Story, Task, Bug, etc.)')
+    create_parser.add_argument('--summary', required=True, help='Issue summary')
+    create_parser.add_argument('--description', help='Issue description')
+
+    # issue update
+    update_parser = issue_subparsers.add_parser('update', help='Update an issue')
+    update_parser.add_argument('issue_key', help='Issue key')
+    update_parser.add_argument('--assignee', help='Assignee email')
+    update_parser.add_argument('--summary', help='New summary')
+    update_parser.add_argument('--description', help='New description')
+
+    # Subtask commands
+    subtask_parser = subparsers.add_parser('subtask', help='Subtask operations')
+    subtask_subparsers = subtask_parser.add_subparsers(dest='subcommand')
+
+    # subtask create
+    subtask_create = subtask_subparsers.add_parser('create', help='Create a subtask')
+    subtask_create.add_argument('--parent', required=True, help='Parent issue key')
+    subtask_create.add_argument('--summary', required=True, help='Subtask summary')
+    subtask_create.add_argument('--description', help='Subtask description')
+
+    # Comment commands
+    comment_parser = subparsers.add_parser('comment', help='Comment operations')
+    comment_subparsers = comment_parser.add_subparsers(dest='subcommand')
+
+    # comment add
+    comment_add = comment_subparsers.add_parser('add', help='Add a comment')
+    comment_add.add_argument('issue_key', help='Issue key')
+    comment_add.add_argument('comment', help='Comment text')
+    comment_add.add_argument('--mention', action='append', help='Mention user by email (can be repeated)')
+
+    # Search
+    search_parser = subparsers.add_parser('search', help='Search issues with JQL')
+    search_parser.add_argument('jql', help='JQL query')
+    search_parser.add_argument('--max-results', type=int, default=50, help='Max results (default: 50)')
+    search_parser.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
+
+    # Transition
+    transition_parser = subparsers.add_parser('transition', help='Transition issue status')
+    transition_parser.add_argument('issue_key', help='Issue key')
+    transition_parser.add_argument('transition', help='Transition name (e.g., "Done", "In Progress")')
+
+    # User commands
+    user_parser = subparsers.add_parser('user', help='User operations')
+    user_subparsers = user_parser.add_subparsers(dest='subcommand')
+
+    # user search
+    user_search = user_subparsers.add_parser('search', help='Search for users')
+    user_search.add_argument('query', help='Email or name to search')
+
+    args = parser.parse_args()
+
+    if not args.command:
+        parser.print_help()
+        return 1
+
+    # Load environment
+    env_path = Path(__file__).parent.parent.parent / '.env'
+    load_dotenv(env_path)
+
+    email = os.getenv('ATLASSIAN_SERVICE_ACCOUNT_EMAIL')
+    token = os.getenv('ATLASSIAN_SERVICE_ACCOUNT_TOKEN')
+    cloud_id = os.getenv('ATLASSIAN_CLOUD_ID')
+
+    if not all([email, token, cloud_id]):
+        print("Error: Missing Atlassian credentials in .env file")
+        print("Required: ATLASSIAN_SERVICE_ACCOUNT_EMAIL, ATLASSIAN_SERVICE_ACCOUNT_TOKEN, ATLASSIAN_CLOUD_ID")
+        return 1
+
+    # Create client
+    client = JiraClient(email, token, cloud_id)
+
+    try:
+        # Route to command handler
+        if args.command == 'issue':
+            if args.subcommand == 'get':
+                cmd_issue_get(client, args)
+            elif args.subcommand == 'create':
+                cmd_issue_create(client, args)
+            elif args.subcommand == 'update':
+                cmd_issue_update(client, args)
+
+        elif args.command == 'subtask':
+            if args.subcommand == 'create':
+                cmd_subtask_create(client, args)
+
+        elif args.command == 'comment':
+            if args.subcommand == 'add':
+                cmd_comment_add(client, args)
+
+        elif args.command == 'search':
+            cmd_search(client, args)
+
+        elif args.command == 'transition':
+            cmd_transition(client, args)
+
+        elif args.command == 'user':
+            if args.subcommand == 'search':
+                cmd_user_search(client, args)
+
+        return 0
+
+    except requests.HTTPError as e:
+        print(f"HTTP Error: {e}")
+        if hasattr(e, 'response') and e.response is not None:
+            try:
+                error_details = e.response.json()
+                print(json.dumps(error_details, indent=2))
+            except:
+                print(e.response.text)
+        return 1
+
+    except Exception as e:
+        print(f"Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

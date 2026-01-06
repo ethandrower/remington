@@ -1,0 +1,104 @@
+{
+  "name": "CiteMed Project Manager Agent",
+  "description": "Autonomous PM agent for CiteMed ECD project - monitors sprints, enforces SLAs, and automates standup workflows",
+  "repository": "https://github.com/citemed/project-manager",
+  "keywords": ["project-management", "jira", "atlassian", "automation", "agile"],
+  "stack": "heroku-22",
+  "buildpacks": [
+    {
+      "url": "heroku/nodejs"
+    },
+    {
+      "url": "heroku/python"
+    }
+  ],
+  "formation": {
+    "worker": {
+      "quantity": 1,
+      "size": "basic"
+    },
+    "clock": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  },
+  "env": {
+    "ATLASSIAN_SERVICE_ACCOUNT_EMAIL": {
+      "description": "Atlassian service account email for API access",
+      "required": true
+    },
+    "ATLASSIAN_SERVICE_ACCOUNT_TOKEN": {
+      "description": "Atlassian API token",
+      "required": true
+    },
+    "ATLASSIAN_CLOUD_ID": {
+      "description": "Atlassian Cloud ID",
+      "value": "67bbfd03-b309-414f-9640-908213f80628",
+      "required": true
+    },
+    "ATLASSIAN_PROJECT_KEY": {
+      "description": "Jira project key (e.g., ECD)",
+      "value": "ECD",
+      "required": true
+    },
+    "ANTHROPIC_API_KEY": {
+      "description": "Anthropic API key for Claude Code CLI",
+      "required": true
+    },
+    "SLACK_BOT_TOKEN": {
+      "description": "Slack bot token for notifications and responses",
+      "required": true
+    },
+    "SLACK_BOT_USER_ID": {
+      "description": "Slack bot user ID for mention detection",
+      "required": true
+    },
+    "SLACK_CHANNEL_STANDUP": {
+      "description": "Slack channel ID for standup reports and monitoring",
+      "required": true
+    },
+    "SLACK_POLL_INTERVAL": {
+      "description": "Slack polling interval in seconds",
+      "value": "15",
+      "required": false
+    },
+    "SLACK_CHANNEL_HEARTBEAT": {
+      "description": "Slack channel ID for hourly heartbeat status (defaults to standup channel if not set)",
+      "required": false
+    },
+    "BUSINESS_TIMEZONE": {
+      "description": "Timezone for business hours",
+      "value": "America/New_York",
+      "required": false
+    },
+    "BUSINESS_HOURS_START": {
+      "description": "Business hours start (24h format)",
+      "value": "9",
+      "required": false
+    },
+    "BUSINESS_HOURS_END": {
+      "description": "Business hours end (24h format)",
+      "value": "17",
+      "required": false
+    },
+    "DRY_RUN": {
+      "description": "Dry run mode - log actions without executing",
+      "value": "false",
+      "required": false
+    },
+    "VERBOSE_LOGGING": {
+      "description": "Enable verbose logging",
+      "value": "false",
+      "required": false
+    }
+  },
+  "addons": [
+    {
+      "plan": "scheduler:standard",
+      "as": "SCHEDULER"
+    }
+  ],
+  "scripts": {
+    "postdeploy": "echo 'Deployment complete. Run: heroku run standup to test.'"
+  }
+}

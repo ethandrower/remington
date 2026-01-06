@@ -1,0 +1,313 @@
+#!/usr/bin/env python3
+"""
+Confluence CLI - Atlassian Confluence API Utility
+Backup tool for when Atlassian MCP is unavailable.
+
+Usage:
+  ./confluence-cli page get 123456
+  ./confluence-cli page create --space ECD --title "My Page" --content "Content here"
+  ./confluence-cli page update 123456 --content "New content"
+  ./confluence-cli search "project documentation"
+  ./confluence-cli space list
+"""
+
+import os
+import sys
+import json
+import argparse
+import requests
+from base64 import b64encode
+from pathlib import Path
+from typing import Optional, Dict, Any, List
+from dotenv import load_dotenv
+
+
+class ConfluenceClient:
+    """Confluence API client for REST operations."""
+
+    def __init__(self, email: str, token: str):
+        self.email = email
+        self.token = token
+        self.base_url = "https://citemed.atlassian.net/wiki/rest/api"
+
+        # Create Basic Auth header
+        auth_str = f"{email}:{token}"
+        auth_bytes = auth_str.encode('ascii')
+        auth_b64 = b64encode(auth_bytes).decode('ascii')
+
+        self.headers = {
+            "Authorization": f"Basic {auth_b64}",
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+
+    def _request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
+        """Make HTTP request to Confluence API."""
+        url = f"{self.base_url}/{endpoint}"
+        response = requests.request(method, url, headers=self.headers, **kwargs)
+        return response
+
+    def get_page(self, page_id: str, expand: Optional[List[str]] = None) -> Dict[str, Any]:
+        """Get page details."""
+        params = {}
+        if expand:
+            params['expand'] = ','.join(expand)
+
+        response = self._request("GET", f"content/{page_id}", params=params)
+        response.raise_for_status()
+        return response.json()
+
+    def create_page(self, space_key: str, title: str, content: str, parent_id: Optional[str] = None) -> Dict[str, Any]:
+        """Create a new page."""
+        payload = {
+            "type": "page",
+            "title": title,
+            "space": {"key": space_key},
+            "body": {
+                "storage": {
+                    "value": content,
+                    "representation": "storage"
+                }
+            }
+        }
+
+        if parent_id:
+            payload["ancestors"] = [{"id": parent_id}]
+
+        response = self._request("POST", "content", json=payload)
+        response.raise_for_status()
+        return response.json()
+
+    def update_page(self, page_id: str, title: str, content: str, version: int) -> Dict[str, Any]:
+        """Update an existing page."""
+        payload = {
+            "id": page_id,
+            "type": "page",
+            "title": title,
+            "version": {"number": version + 1},
+            "body": {
+                "storage": {
+                    "value": content,
+                    "representation": "storage"
+                }
+            }
+        }
+
+        response = self._request("PUT", f"content/{page_id}", json=payload)
+        response.raise_for_status()
+        return response.json()
+
+    def search(self, cql: str, limit: int = 25) -> Dict[str, Any]:
+        """Search using CQL (Confluence Query Language)."""
+        params = {
+            "cql": cql,
+            "limit": limit
+        }
+
+        response = self._request("GET", "content/search", params=params)
+        response.raise_for_status()
+        return response.json()
+
+    def list_spaces(self, limit: int = 25) -> List[Dict[str, Any]]:
+        """List all spaces."""
+        params = {"limit": limit}
+        response = self._request("GET", "space", params=params)
+        response.raise_for_status()
+        return response.json()['results']
+
+
+def format_page(page: Dict[str, Any], verbose: bool = False) -> str:
+    """Format page for display."""
+    page_id = page['id']
+    title = page.get('title', 'N/A')
+    page_type = page.get('type', 'N/A')
+
+    output = f"{page_id}: {title} ({page_type})\n"
+
+    if verbose and 'body' in page:
+        content = page['body'].get('storage', {}).get('value', 'N/A')
+        output += f"  Content length: {len(content)} chars\n"
+
+    if '_links' in page:
+        web_ui = page['_links'].get('webui', '')
+        if web_ui:
+            output += f"  URL: https://citemed.atlassian.net/wiki{web_ui}\n"
+
+    return output
+
+
+def cmd_page_get(client: ConfluenceClient, args):
+    """Get page details."""
+    expand = ['body.storage', 'version']
+    page = client.get_page(args.page_id, expand=expand)
+
+    print(format_page(page, verbose=True))
+
+    if args.json:
+        print("\n" + json.dumps(page, indent=2))
+
+
+def cmd_page_create(client: ConfluenceClient, args):
+    """Create a new page."""
+    result = client.create_page(
+        space_key=args.space,
+        title=args.title,
+        content=args.content,
+        parent_id=args.parent
+    )
+
+    page_id = result['id']
+    web_ui = result['_links'].get('webui', '')
+    print(f"✓ Created page {page_id}")
+    print(f"  URL: https://citemed.atlassian.net/wiki{web_ui}")
+
+
+def cmd_page_update(client: ConfluenceClient, args):
+    """Update a page."""
+    # Get current page to get version
+    page = client.get_page(args.page_id, expand=['version'])
+    current_version = page['version']['number']
+    current_title = page['title']
+
+    title = args.title if args.title else current_title
+
+    result = client.update_page(
+        page_id=args.page_id,
+        title=title,
+        content=args.content,
+        version=current_version
+    )
+
+    print(f"✓ Updated page {args.page_id} (version {current_version} → {current_version + 1})")
+
+
+def cmd_search(client: ConfluenceClient, args):
+    """Search Confluence."""
+    results = client.search(args.cql, limit=args.limit)
+
+    total = results.get('totalSize', 0)
+    pages = results.get('results', [])
+
+    print(f"Found {total} results (showing {len(pages)}):\n")
+
+    for page in pages:
+        print(format_page(page, verbose=args.verbose))
+
+
+def cmd_space_list(client: ConfluenceClient, args):
+    """List spaces."""
+    spaces = client.list_spaces(limit=args.limit)
+
+    print(f"Found {len(spaces)} spaces:\n")
+
+    for space in spaces:
+        key = space.get('key', 'N/A')
+        name = space.get('name', 'N/A')
+        space_type = space.get('type', 'N/A')
+        print(f"  {key}: {name} ({space_type})")
+
+
+def main():
+    """Main CLI entrypoint."""
+    parser = argparse.ArgumentParser(
+        description="Confluence CLI - Atlassian API utility",
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+
+    subparsers = parser.add_subparsers(dest='command', help='Commands')
+
+    # Page commands
+    page_parser = subparsers.add_parser('page', help='Page operations')
+    page_subparsers = page_parser.add_subparsers(dest='subcommand')
+
+    # page get
+    get_parser = page_subparsers.add_parser('get', help='Get page details')
+    get_parser.add_argument('page_id', help='Page ID')
+    get_parser.add_argument('--json', action='store_true', help='Output full JSON')
+
+    # page create
+    create_parser = page_subparsers.add_parser('create', help='Create a new page')
+    create_parser.add_argument('--space', required=True, help='Space key')
+    create_parser.add_argument('--title', required=True, help='Page title')
+    create_parser.add_argument('--content', required=True, help='Page content (HTML)')
+    create_parser.add_argument('--parent', help='Parent page ID')
+
+    # page update
+    update_parser = page_subparsers.add_parser('update', help='Update a page')
+    update_parser.add_argument('page_id', help='Page ID')
+    update_parser.add_argument('--title', help='New title')
+    update_parser.add_argument('--content', required=True, help='New content (HTML)')
+
+    # Search
+    search_parser = subparsers.add_parser('search', help='Search Confluence')
+    search_parser.add_argument('cql', help='CQL query')
+    search_parser.add_argument('--limit', type=int, default=25, help='Max results (default: 25)')
+    search_parser.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
+
+    # Space commands
+    space_parser = subparsers.add_parser('space', help='Space operations')
+    space_subparsers = space_parser.add_subparsers(dest='subcommand')
+
+    # space list
+    space_list = space_subparsers.add_parser('list', help='List spaces')
+    space_list.add_argument('--limit', type=int, default=25, help='Max results (default: 25)')
+
+    args = parser.parse_args()
+
+    if not args.command:
+        parser.print_help()
+        return 1
+
+    # Load environment
+    env_path = Path(__file__).parent.parent.parent / '.env'
+    load_dotenv(env_path)
+
+    email = os.getenv('ATLASSIAN_SERVICE_ACCOUNT_EMAIL')
+    token = os.getenv('ATLASSIAN_SERVICE_ACCOUNT_TOKEN')
+
+    if not all([email, token]):
+        print("Error: Missing Atlassian credentials in .env file")
+        print("Required: ATLASSIAN_SERVICE_ACCOUNT_EMAIL, ATLASSIAN_SERVICE_ACCOUNT_TOKEN")
+        return 1
+
+    # Create client
+    client = ConfluenceClient(email, token)
+
+    try:
+        # Route to command handler
+        if args.command == 'page':
+            if args.subcommand == 'get':
+                cmd_page_get(client, args)
+            elif args.subcommand == 'create':
+                cmd_page_create(client, args)
+            elif args.subcommand == 'update':
+                cmd_page_update(client, args)
+
+        elif args.command == 'search':
+            cmd_search(client, args)
+
+        elif args.command == 'space':
+            if args.subcommand == 'list':
+                cmd_space_list(client, args)
+
+        return 0
+
+    except requests.HTTPError as e:
+        print(f"HTTP Error: {e}")
+        if hasattr(e, 'response') and e.response is not None:
+            try:
+                error_details = e.response.json()
+                print(json.dumps(error_details, indent=2))
+            except:
+                print(e.response.text)
+        return 1
+
+    except Exception as e:
+        print(f"Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())

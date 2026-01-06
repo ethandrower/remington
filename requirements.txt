@@ -1,0 +1,33 @@
+# CiteMed Project Manager - Python Dependencies
+
+# Core dependencies
+python-dotenv>=1.0.0     # Environment variable management from .env file
+requests>=2.31.0         # HTTP library for API calls
+
+# Web framework
+fastapi==0.104.1         # Web framework for webhook server
+uvicorn[standard]==0.24.0  # ASGI server
+
+# AI
+anthropic==0.7.0         # Claude API for agent reasoning
+
+# Database (SQLite - no extra dependencies needed, but need SQLAlchemy)
+sqlalchemy==2.0.23       # ORM for database
+
+# Date/time utilities
+python-dateutil>=2.8.2   # Enhanced date parsing and business hours calculation
+pytz>=2024.1             # Timezone support for business hours
+schedule>=1.2.0          # Task scheduling for periodic checks
+
+# Slack integration
+slack_sdk>=3.37.0        # Slack API client for logging and notifications
+
+# Scheduling (for background polling)
+APScheduler>=3.10.0      # Advanced scheduler for polling threads
+
+# Bitbucket CLI (for Bitbucket polling)
+git+https://github.com/ethandrower/bitbucket-cli-claude-code.git  # Required by bitbucket_monitor
+
+# Optional: Data analysis (if implementing advanced reporting)
+# pandas>=2.0.0       # Data analysis for sprint metrics
+# matplotlib>=3.7.0   # Visualization for burndown charts
