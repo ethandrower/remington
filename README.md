@@ -1,10 +1,10 @@
-# Autonomous Project Manager Agent
+# Remington - Autonomous Project Manager Agent
 
-> An AI-powered project management assistant that monitors Jira, Bitbucket, and Slack to automate team workflows, enforce SLAs, and provide intelligent responses.
+> An AI-powered project management assistant that monitors Jira, Bitbucket, and Slack to automate workflows, enforce SLAs, and keep your team on track.
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Claude](https://img.shields.io/badge/powered%20by-Claude%20Code-orange.svg)](https://claude.com/claude-code)
+[![Claude](https://img.shields.io/badge/powered%20by-Claude%20AI-orange.svg)](https://www.anthropic.com/)
 
 ---
 
@@ -12,82 +12,158 @@
 
 ```bash
 # 1. Clone and setup
-git clone https://github.com/yourusername/project-manager.git
-cd project-manager
+git clone https://github.com/ethandrower/remington.git
+cd remington
 python3 -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # 2. Install dependencies
 pip install -r requirements.txt
 
-# 3. Configure environment
-cp .env.example .env
-# Edit .env with your credentials
+# 3. Install bitbucket-cli (required dependency)
+# See: https://github.com/ethandrower/bitbucket-cli-for-claude-code
+pip install git+https://github.com/ethandrower/bitbucket-cli-for-claude-code.git
 
-# 4. Run the service
+# 4. Configure environment
+cp .env.example .env
+# Edit .env with your API keys and configuration
+
+# 5. Start the service
 python src/pm_agent_service.py
 ```
 
-That's it! The agent is now monitoring your Jira, Slack, and Bitbucket for mentions and events.
+That's it! Remington is now monitoring Jira, Slack, and Bitbucket 24/7.
 
 ---
 
 ## 🎯 What It Does
 
-This autonomous agent operates 24/7 to handle routine project management tasks:
+Remington is an autonomous agent that acts as your project manager's assistant. It runs 24/7, monitoring your team's activities and taking action when needed.
 
-### Core Features
-- **🤖 Automated PR Code Reviews** - Analyzes code quality, security, and best practices
-- **💬 Intelligent Jira Responses** - Context-aware answers to ticket questions
-- **📊 Real-Time Monitoring** - Hybrid webhook + polling architecture
-- **✅ SLA Compliance Tracking** - Automatic violation detection and escalation
-- **📈 Sprint Health Analysis** - Burndown tracking and epic progress monitoring
-- **👥 Team Productivity Audits** - Timesheet validation and code-ticket correlation
-- **🔔 Smart @Mentions** - Proper user notifications in Jira and Bitbucket
+### Core Capabilities
 
-### Automation Examples
+- **📊 SLA Enforcement** - Tracks 5 types of SLAs and escalates violations automatically
+- **💬 Smart Responses** - Tag `@remington` in Jira/Slack/Bitbucket for context-aware answers
+- **📈 Daily Standups** - Automated standup reports every weekday at 9 AM
+- **🔍 Sprint Health** - Tracks burndown, velocity, and identifies bottlenecks
+- **⏰ Deadline Monitoring** - Flags at-risk tickets before they're overdue
+- **✅ PR Reviews** - Monitors pull requests and nudges for timely reviews
 
-**Automated PR Review:**
+### How to Interact with Remington
+
+**In Jira:**
 ```
-Developer pushes commit → Agent detects change → Analyzes code quality
-→ Posts detailed review with inline comments → @mentions author
-```
-
-**Jira Comment Response:**
-```
-User asks "@bot what's the status?" → Agent reads ticket history
-→ Analyzes context and business rules → Posts intelligent response
-→ @mentions relevant team members
+Comment on any ticket: "@remington what's the status of this?"
+→ Remington reads the full ticket context and posts a detailed response
 ```
 
-**SLA Monitoring:**
+**In Slack:**
 ```
-PR sits for 48 hours → Agent detects violation → Posts escalation
-→ Notifies tech lead → Updates tracking database
+In any channel: "@remington when is PROJ-123 due?"
+→ Remington fetches ticket details from Jira and responds in thread
 ```
+
+**In Bitbucket:**
+```
+Comment on PR: "@remington review this code"
+→ Remington analyzes the diff and posts review comments
+```
+
+**Important:** Use the exact bot mention format for your platform:
+- **Jira**: `@remington` (uses Jira account ID internally)
+- **Slack**: `@Remington` or `<@U09BVV00XRP>` (your bot's user ID)
+- **Bitbucket**: `@{bot-account-id}` (Bitbucket UUID format)
 
 ---
 
-## 🏗️ Architecture
+## 📋 SLA Monitoring & Enforcement
 
-The agent runs as a **24/7 service** with three concurrent systems:
+Remington automatically monitors these Service Level Agreements:
 
-### 1. Webhook Server (Primary - Instant Response)
-- FastAPI server listening for Jira/Bitbucket events
-- < 100ms webhook acknowledgment
-- Background processing with Claude Code
+| SLA Type | Target | What It Monitors | Escalation |
+|----------|--------|------------------|------------|
+| **Jira Comment Response** | 2 business days | Developer responses to stakeholder questions | 4-level escalation (comment → Slack → team → leadership) |
+| **PR Review Turnaround** | 24-48 hours | Time from "Ready for Review" to first review | Slack notification to reviewer |
+| **PR Code Activity** | 2 business days | PRs "In Progress" must show commits | Slack reminder to PR author |
+| **Blocked Ticket Updates** | Daily | Tickets in "Blocked" status need daily updates | Daily Jira comment reminder |
+| **Pending Approval Duration** | 48 hours | Tickets waiting for approval/sign-off | Slack notification to approver |
 
-### 2. Polling Monitors (Backup - Catches Missed Events)
-- **Slack**: 15 seconds (primary - no webhook support)
-- **Jira**: 30 seconds (backup to webhooks)
-- **Bitbucket**: 30 seconds (backup to webhooks)
-- 3-day lookback period prevents missing events after restarts
+**Business Hours:**
+- Default: Monday-Friday, 9 AM - 5 PM (configurable timezone)
+- Holidays excluded (configurable in `.env`)
+- SLA timers only count business hours
 
-### 3. Claude Code Orchestrator (Intelligence Layer)
-- Uses Claude Code CLI with MCP (Model Context Protocol)
-- Reads agent instructions from `.claude/` directory
-- Executes context-aware decision-making
-- Posts responses via REST APIs with proper @mentions
+### 4-Level Escalation Matrix
+
+When an SLA is violated, Remington escalates automatically:
+
+| Level | Timing | Action | Where |
+|-------|--------|--------|-------|
+| **Level 1** | 0-1 days overdue | Friendly reminder | Jira comment only |
+| **Level 2** | 1-2 days overdue | Direct request | Jira comment + Slack DM |
+| **Level 3** | 2-3 days overdue | Team escalation | Jira + Slack + @tech-lead |
+| **Level 4** | 3+ days overdue | Leadership alert | Jira + Slack + @leadership |
+
+---
+
+## 🤖 Automated Workflows
+
+### Daily Standup (Weekdays at 9 AM)
+
+Remington automatically posts a comprehensive standup report to Slack:
+
+1. **Code-Ticket Gap Detection** - Finds commits without associated Jira tickets
+2. **Productivity Audit** - Analyzes work quality over the last 7 days
+3. **Team Timesheet Review** - Validates logged time vs actual work
+4. **SLA Violations** - Lists all current violations and pending escalations
+5. **Deadline Risk Dashboard** - Highlights tickets at risk of missing deadlines
+
+**Example Output:**
+```
+🌅 Daily Standup Report - January 6, 2026
+
+📊 Sprint Health:
+  • Sprint: Sprint 42 (Jan 1-14)
+  • Completed: 23/40 points (58%)
+  • On track for 85% completion
+
+⚠️ SLA Violations:
+  • PROJ-456: PR review waiting 3 days (Level 3 escalation sent)
+  • PROJ-789: Blocked ticket needs update (Level 1 reminder)
+
+🎯 Deadline Risks:
+  • PROJ-123: Due tomorrow, still "In Progress"
+  • PROJ-234: Due in 3 days, no commits in 5 days
+
+👥 Team Activity:
+  • 15 commits yesterday
+  • 3 PRs merged
+  • 12 Jira updates
+```
+
+### Continuous Monitoring
+
+Remington runs three concurrent monitoring systems:
+
+**1. Webhook Listeners (Instant Response)**
+- Jira webhooks: Comment events
+- Bitbucket webhooks: PR events, comments
+- FastAPI server on port 8000
+
+**2. Polling Monitors (Backup + Slack)**
+- **Slack**: Every 15 seconds (primary - Slack has no webhooks)
+- **Jira**: Every 30 seconds (backup to webhooks)
+- **Bitbucket**: Every 30 seconds (backup to webhooks)
+
+**3. Scheduled Jobs (Daily/Hourly)**
+- **Daily Standup**: Weekdays at 9 AM
+- **SLA Checks**: Every hour
+- **Sprint Analysis**: On-demand via `python run_agent.py sprint-analysis`
+
+**Why the hybrid approach?**
+- Webhooks can fail (network issues, misconfigurations)
+- Polling ensures nothing is missed (3-day lookback after restart)
+- Slack has no webhook support, requires polling
 
 ---
 
@@ -95,49 +171,51 @@ The agent runs as a **24/7 service** with three concurrent systems:
 
 ### Prerequisites
 
-- **Python 3.11+**
-- **Node.js 18+** (for MCP servers)
-- **Claude Code CLI** - [Install here](https://claude.com/claude-code)
-- **Access to:**
-  - Atlassian account (Jira/Bitbucket)
+- **Python 3.11+** ([Download](https://www.python.org/downloads/))
+- **API Access:**
+  - Atlassian account (Jira + Bitbucket)
+  - Anthropic API key ([Get one](https://console.anthropic.com/))
   - Slack workspace (optional)
 
-### Setup Steps
+### Step-by-Step Setup
 
-#### 1. Install Claude Code CLI
+#### 1. Clone Repository
 
 ```bash
-# Download from https://claude.com/claude-code
-# Verify installation
-claude --version
+git clone https://github.com/ethandrower/remington.git
+cd remington
 ```
 
-#### 2. Clone and Configure
+#### 2. Create Virtual Environment
 
 ```bash
-# Clone repository
-git clone https://github.com/yourusername/project-manager.git
-cd project-manager
-
-# Create virtual environment
 python3.11 -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 ```
 
-#### 3. Environment Configuration
+#### 3. Install Dependencies
+
+```bash
+# Install main dependencies
+pip install -r requirements.txt
+
+# Install bitbucket-cli (required for Bitbucket PR automation)
+pip install git+https://github.com/ethandrower/bitbucket-cli-for-claude-code.git
+```
+
+**Note on bitbucket-cli:** This is a custom CLI tool that provides a cleaner interface to Bitbucket's API than the official Atlassian Python library. It handles authentication, pagination, and proper @mention formatting automatically.
+
+#### 4. Configure Environment
 
 ```bash
 # Copy example configuration
 cp .env.example .env
 
-# Edit .env with your credentials
-nano .env  # or use your preferred editor
+# Edit with your credentials
+nano .env  # or your preferred editor
 ```
 
-**Required Environment Variables:**
+**Required Variables:**
 
 ```bash
 # Anthropic API (for AI reasoning)
@@ -148,41 +226,76 @@ ATLASSIAN_CLOUD_ID=your-cloud-id-here
 JIRA_INSTANCE_URL=https://your-company.atlassian.net
 ATLASSIAN_PROJECT_KEY=YOUR_PROJECT
 
-# Slack Configuration (optional)
+# Atlassian Authentication
+ATLASSIAN_API_TOKEN=your-jira-api-token
+ATLASSIAN_SERVICE_ACCOUNT_EMAIL=bot@your-company.atlassian.com
+BITBUCKET_REPO_TOKEN=your-bitbucket-app-password
+
+# Slack Configuration (optional but recommended)
 SLACK_BOT_TOKEN=xoxb-your-bot-token-here
 SLACK_BOT_USER_ID=U123ABC456
 SLACK_CHANNEL_STANDUP=C123ABC456
 
-# Company Configuration
+# Company Settings
 COMPANY_NAME=YourCompany
+BUSINESS_HOURS_START=9
+BUSINESS_HOURS_END=17
+BUSINESS_TIMEZONE=America/New_York
 ```
 
-See [`.env.example`](.env.example) for complete configuration options.
+#### 5. Get Your Credentials
 
-#### 4. Test Configuration
+**Atlassian Cloud ID:**
+1. Go to https://admin.atlassian.com/
+2. Look at the URL: `https://admin.atlassian.com/s/{your-cloud-id}/...`
+3. Copy the long string
+
+**Jira API Token:**
+1. Go to https://id.atlassian.com/manage-profile/security/api-tokens
+2. Click "Create API token"
+3. Copy the generated token
+
+**Bitbucket App Password:**
+1. Go to https://bitbucket.org/account/settings/app-passwords/
+2. Click "Create app password"
+3. Grant permissions: `repository:read`, `repository:write`, `pullrequest:write`
+4. Copy the generated password
+
+**Slack Bot Token:**
+1. Go to https://api.slack.com/apps
+2. Create new app (from scratch)
+3. Add OAuth scopes: `app_mentions:read`, `channels:history`, `chat:write`, `users:read`
+4. Install to workspace
+5. Copy "Bot User OAuth Token" (starts with `xoxb-`)
+
+**Slack Bot User ID:**
+```bash
+# Get it via Slack API
+curl https://slack.com/api/auth.test \
+  -H "Authorization: Bearer xoxb-your-token" | jq -r .user_id
+```
+
+#### 6. Test Configuration
 
 ```bash
-# Validate all required environment variables are set
-python src/config.py
+# Validate environment variables
+python -c "from src.config import get_atlassian_config; print(get_atlassian_config())"
 
 # Expected output:
-# ✅ Anthropic API Key: sk-ant-...
-# ✅ Atlassian Cloud ID: your-cloud-id
-# ✅ Jira URL: https://your-company.atlassian.net
-# ✅ Project Key: YOUR_PROJECT
+# {'cloud_id': 'your-cloud-id', 'jira_url': 'https://...', 'project_key': 'PROJ'}
 ```
 
-#### 5. Run the Service
+#### 7. Start Remington
 
 ```bash
-# Start the PM Agent (this runs everything)
+# Run in foreground (for testing)
 python src/pm_agent_service.py
 
-# Or with module syntax
-python -m src.pm_agent_service
+# Run in background (production)
+nohup python -u src/pm_agent_service.py > pm_agent.log 2>&1 &
 
-# Run in background with logging
-python -u src/pm_agent_service.py 2>&1 | tee -a pm_agent.log &
+# Check logs
+tail -f pm_agent.log
 ```
 
 **Expected Output:**
@@ -194,11 +307,10 @@ python -u src/pm_agent_service.py 2>&1 | tee -a pm_agent.log &
 Strategy:
   - Webhooks: Primary (instant response)
   - Polling: Backup (catches missed events)
-  - Intelligence: Claude Code with MCP tools
+  - Intelligence: Claude API via orchestrator
 
-✅ Claude Code Orchestrator ready
-✅ Slack Monitor initialized (15s polling)
 ✅ Jira Monitor initialized (30s backup polling)
+✅ Slack Monitor initialized (15s primary polling)
 ✅ Bitbucket Monitor initialized (30s backup polling)
 
 🚀 Starting webhook server on port 8000...
@@ -207,46 +319,119 @@ INFO:     Uvicorn running on http://0.0.0.0:8000
 
 ---
 
-## 🔧 Configuration Guide
+## 🔧 Configuration
 
-### Getting Your Credentials
+### Setting Up Webhooks (Recommended)
 
-#### Atlassian Cloud ID
-1. Go to https://admin.atlassian.com/
-2. Look at the URL - your Cloud ID is the long string
-3. Example: `https://admin.atlassian.com/s/{cloud-id}/...`
+**Jira Webhooks:**
+1. Go to Jira → Settings → System → Webhooks
+2. Create webhook:
+   - **URL**: `http://your-server:8000/webhooks/jira`
+   - **Events**: Issue → commented
+   - **JQL Filter**: `project = YOUR_PROJECT`
 
-#### Jira Project Key
-1. Open any ticket in your project
-2. Look at the issue key (e.g., `PROJ-123`)
-3. The project key is the prefix before the dash (`PROJ`)
+**Bitbucket Webhooks:**
+1. Repository → Settings → Webhooks
+2. Create webhook:
+   - **URL**: `http://your-server:8000/webhooks/bitbucket`
+   - **Events**: Pull request created/updated/commented
 
-#### Slack Bot Token
-1. Go to https://api.slack.com/apps
-2. Create a new app or select existing
-3. Navigate to "OAuth & Permissions"
-4. Install app to workspace
-5. Copy the "Bot User OAuth Token" (starts with `xoxb-`)
+**Note:** Polling continues even with webhooks configured (belt-and-suspenders approach).
 
-#### Slack Bot User ID
-1. Go to https://api.slack.com/apps
-2. Select your app → "OAuth & Permissions"
-3. Scroll to "Scopes" → Add bot token scopes:
-   - `app_mentions:read`
-   - `channels:history`
-   - `channels:read`
-   - `chat:write`
-   - `users:read`
-4. Install/reinstall app to workspace
-5. Get Bot User ID from app settings or by calling `client.auth_test()`
+### Customizing SLAs
 
-### MCP Server Configuration
+Edit `.env`:
 
-The agent uses Model Context Protocol (MCP) servers for accessing Jira/Confluence:
+```bash
+# Business hours (SLA timers only run during these hours)
+BUSINESS_HOURS_START=9
+BUSINESS_HOURS_END=17
+BUSINESS_TIMEZONE=America/New_York
 
-1. Copy MCP example: `cp .mcp.json.example .mcp.json`
-2. Edit `.mcp.json` with your Atlassian credentials
-3. See [MCP documentation](https://modelcontextprotocol.io/) for details
+# Holidays (comma-separated YYYY-MM-DD)
+COMPANY_HOLIDAYS=2025-01-01,2025-05-26,2025-07-04,2025-12-25
+
+# SLA Targets (in business days/hours)
+JIRA_COMMENT_SLA_DAYS=2
+PR_REVIEW_SLA_HOURS=48
+```
+
+See [`.claude/workflows/sla-monitoring.md`](.claude/workflows/sla-monitoring.md) for full SLA definitions.
+
+---
+
+## 🏗️ Architecture
+
+### Why We Don't Use MCP (Model Context Protocol)
+
+**MCP was considered but rejected because:**
+
+1. **Complexity Overhead** - MCP requires Node.js runtime, multiple server processes, and complex configuration
+2. **Authentication Issues** - MCP servers have trouble with service account tokens and OAuth flows
+3. **Limited Error Handling** - MCP abstraction makes debugging API issues harder
+4. **Unnecessary Abstraction** - Direct REST API calls are simpler and more reliable
+5. **Better Control** - Direct API access allows custom retry logic, rate limiting, and error handling
+
+**Instead, we use:**
+- ✅ **Direct Atlassian REST APIs** - Simple, well-documented, reliable
+- ✅ **Custom bitbucket-cli** - Thin wrapper that handles auth and formatting
+- ✅ **Claude API directly** - No intermediary layers, full control
+- ✅ **Python requests library** - Standard, battle-tested HTTP client
+
+This keeps the stack simple: `Python → REST APIs → Atlassian/Slack/Claude`
+
+### System Components
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Remington Agent                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
+│  │   Webhook    │  │   Polling    │  │  Scheduled   │     │
+│  │   Listeners  │  │   Monitors   │  │    Jobs      │     │
+│  │   (FastAPI)  │  │ (15-30s loops)│  │(Cron-based)  │     │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘     │
+│         │                 │                 │              │
+│         └─────────────────┴─────────────────┘              │
+│                           │                                │
+│                  ┌────────▼────────┐                       │
+│                  │  Orchestrator   │                       │
+│                  │  (Routes to     │                       │
+│                  │   Sub-Agents)   │                       │
+│                  └────────┬────────┘                       │
+│                           │                                │
+│         ┌─────────────────┼─────────────────┐             │
+│         │                 │                 │             │
+│    ┌────▼────┐       ┌────▼────┐      ┌────▼────┐        │
+│    │ Standup │       │   SLA   │      │  Jira   │        │
+│    │Orchestr.│       │ Monitor │      │ Manager │        │
+│    └─────────┘       └─────────┘      └─────────┘        │
+│                                                            │
+│              (6 specialized sub-agents)                    │
+│                                                            │
+└─────────────────────────────────────────────────────────────┘
+                            │
+        ┌───────────────────┼───────────────────┐
+        │                   │                   │
+   ┌────▼────┐         ┌────▼────┐        ┌────▼────┐
+   │  Jira   │         │  Slack  │        │Bitbucket│
+   │   API   │         │   API   │        │   API   │
+   └─────────┘         └─────────┘        └─────────┘
+```
+
+### 6 Specialized Sub-Agents
+
+Located in `.claude/agents/`, each sub-agent has specific responsibilities:
+
+| Agent | Purpose | Invoked By |
+|-------|---------|------------|
+| **standup-orchestrator** | Daily standup reports | Scheduled (9 AM weekdays) |
+| **sprint-analyzer** | Sprint burndown, velocity tracking | On-demand |
+| **sla-monitor** | SLA violation detection & escalation | Hourly schedule |
+| **developer-auditor** | Timesheet vs code correlation | Daily standup |
+| **jira-manager** | Jira comment responses, ticket updates | @mention in Jira |
+| **deadline-risk-analyzer** | Due date monitoring | Daily standup |
 
 ---
 
@@ -254,152 +439,69 @@ The agent uses Model Context Protocol (MCP) servers for accessing Jira/Confluenc
 
 ### Daily Operations
 
-**Monitor Service Status:**
+**Check Service Status:**
 ```bash
-# Check if service is running
+# Is it running?
 ps aux | grep pm_agent_service
 
 # Check webhook server health
-curl http://localhost:8000/health | python -m json.tool
+curl http://localhost:8000/health
 
 # View live logs
 tail -f pm_agent.log
 ```
 
-**Manual Workflows:**
+**Manual Workflow Invocation:**
 ```bash
-# Run daily standup report once
+# Run daily standup manually
 python run_agent.py standup
 
 # Run SLA compliance check
 python run_agent.py sla-check
 
-# Run sprint analysis
+# Analyze sprint health
 python run_agent.py sprint-analysis
 ```
 
-### Webhook Setup
+### Interacting with Remington
 
-**Jira Webhooks:**
-1. Go to your Jira instance → Settings → System → Webhooks
-2. Create webhook:
-   - **URL**: `http://your-server:8000/webhooks/jira`
-   - **Events**: Issue → commented
-   - **JQL Filter**: `project = YOUR_PROJECT`
+**Ask questions:**
+- Jira: `@remington what's blocking this ticket?`
+- Slack: `@Remington summarize PROJ-123`
+- Bitbucket: `@remington when should this PR merge?`
 
-**Bitbucket Webhooks:**
-1. Go to Repository → Settings → Webhooks
-2. Create webhook:
-   - **URL**: `http://your-server:8000/webhooks/bitbucket`
-   - **Events**: Pull request created/updated/commented
+**Request actions:**
+- `@remington update this ticket to In Progress`
+- `@remington assign this to @developer`
+- `@remington what's our sprint velocity?`
 
-**Note**: Polling continues as backup even with webhooks configured.
-
----
-
-## 🧠 How It Works
-
-### Agent Architecture
-
-The agent consists of **6 specialized sub-agents** (`.claude/agents/`):
-
-| Sub-Agent | Responsibilities |
-|-----------|-----------------|
-| **Standup Orchestrator** | Daily standup reports, sprint progress tracking |
-| **Sprint Analyzer** | Burndown analysis, epic progress, bottleneck detection |
-| **SLA Monitor** | Compliance tracking, escalation execution |
-| **Developer Auditor** | Timesheet validation, productivity analysis |
-| **Jira Manager** | Comment responses, ticket updates, JQL queries |
-| **Deadline Risk Analyzer** | Due date monitoring, risk assessment |
-
-### Knowledge Base
-
-**Skills** (`.claude/skills/`):
-- `agile-workflows/` - Sprint planning, standups, retrospectives
-- `jira-best-practices/` - Ticket formatting, workflow guidance
-- `team-communication/` - Slack messaging, escalation templates
-- `sla-enforcement/` - SLA logic, escalation decision trees
-
-### Workflow Example: PR Review
-
-```
-1. Developer pushes new commit to PR
-   ↓
-2. Bitbucket webhook → PM Agent (instant)
-   OR Polling detects commit (30s backup)
-   ↓
-3. Check database: Already reviewed? → Skip if yes
-   ↓
-4. Claude Code Orchestrator:
-   - Fetches PR diff
-   - Reads code review guidelines
-   - Analyzes code quality, security, best practices
-   - Generates review comments
-   ↓
-5. Posts review to Bitbucket:
-   - Summary comment with @author mention
-   - Inline comments on specific issues
-   - Overall recommendation
-   ↓
-6. Database updated: Mark commit as reviewed
-   ↓
-7. Developer receives notification
-```
-
-**Typical Response Time**: 60-90 seconds
-
----
-
-## 📊 SLA Definitions
-
-The agent enforces these Service Level Agreements (customize in `.env`):
-
-| SLA | Default Target | Applies To | Escalation |
-|-----|---------------|------------|------------|
-| **Jira Comment Response** | 2 business days | Stakeholder comments | 4-level matrix |
-| **PR Review** | 24-48 hours | Initial review of PRs | Slack notification |
-| **PR Staleness** | 2 business days | PRs without commits | Author notification |
-| **Blocked Ticket Updates** | Daily | Blocked status tickets | Daily reminder |
-| **Pending Approval** | 48 hours | Awaiting sign-off | Approver reminder |
-
-**Business Hours**: Configurable via `BUSINESS_HOURS_START`, `BUSINESS_HOURS_END`, and `BUSINESS_TIMEZONE` in `.env`
-
-See [`.claude/workflows/sla-monitoring.md`](.claude/workflows/sla-monitoring.md) for complete definitions.
-
----
-
-## 🚨 Escalation Matrix
-
-Automated escalations follow a 4-level system:
-
-| Level | Timing | Action | Channels |
-|-------|--------|--------|----------|
-| **Level 1** | 0-1 days overdue | Soft reminder | Jira comment |
-| **Level 2** | 1-2 days overdue | Explicit request | Jira + Slack |
-| **Level 3** | 2-3 days overdue | Team escalation | Jira + Slack + @tech-lead |
-| **Level 4** | 3+ days overdue | Leadership alert | Jira + Slack + @leadership |
-
-Escalation templates are customizable in `.claude/skills/sla-enforcement/`.
+**Get status:**
+- `@remington what are our current SLA violations?`
+- `@remington which tickets are at risk of missing deadlines?`
+- `@remington show me sprint burndown`
 
 ---
 
 ## 🧪 Testing
 
-### Manual Testing
+### Manual Integration Tests
 
-**Test Jira Comment Response:**
-1. Start service: `python src/pm_agent_service.py`
-2. Post comment in Jira: "@bot please review this ticket"
-3. Watch logs for detection and processing
-4. Check Jira for bot's response (30-60 seconds)
-5. Verify @mention is clickable
+**Test Jira Response:**
+1. Start: `python src/pm_agent_service.py`
+2. Post Jira comment: `@remington hello`
+3. Watch logs for detection
+4. Verify response appears (30-60 seconds)
 
-**Test PR Review:**
+**Test Slack Monitoring:**
 1. Start service
-2. Push commit to an open PR
-3. Watch logs for PR detection
-4. Check PR for automated review (60-90 seconds)
-5. Verify @author mention works
+2. Message in Slack: `@Remington what's the status of PROJ-123?`
+3. Watch logs
+4. Verify threaded response
+
+**Test SLA Detection:**
+1. Create PR and leave unreviewed for 48+ hours
+2. Wait for hourly SLA check
+3. Verify escalation comment appears in PR
 
 ### Automated Tests
 
@@ -407,7 +509,7 @@ Escalation templates are customizable in `.claude/skills/sla-enforcement/`.
 # Run full test suite
 pytest tests/ -v
 
-# Run specific test
+# Run specific monitor tests
 pytest tests/test_polling_monitors.py -v
 
 # Run with coverage
@@ -418,22 +520,24 @@ pytest --cov=src tests/
 
 ## 🐳 Deployment
 
-### Production Deployment Options
+### Option 1: systemd Service (Linux)
 
-#### Option 1: systemd Service (Linux)
+```bash
+# Create service file
+sudo nano /etc/systemd/system/remington.service
+```
 
-1. Create service file: `/etc/systemd/system/pm-agent.service`
 ```ini
 [Unit]
-Description=Autonomous PM Agent Service
+Description=Remington PM Agent
 After=network.target
 
 [Service]
 Type=simple
-User=yourusername
-WorkingDirectory=/path/to/project-manager
-Environment="PATH=/path/to/project-manager/.venv/bin"
-ExecStart=/path/to/project-manager/.venv/bin/python -m src.pm_agent_service
+User=your-username
+WorkingDirectory=/path/to/remington
+Environment="PATH=/path/to/remington/.venv/bin"
+ExecStart=/path/to/remington/.venv/bin/python src/pm_agent_service.py
 Restart=always
 RestartSec=10
 
@@ -441,288 +545,192 @@ RestartSec=10
 WantedBy=multi-user.target
 ```
 
-2. Enable and start:
 ```bash
-sudo systemctl enable pm-agent
-sudo systemctl start pm-agent
-sudo systemctl status pm-agent
+# Enable and start
+sudo systemctl enable remington
+sudo systemctl start remington
+sudo systemctl status remington
 ```
 
-#### Option 2: Docker Container
+### Option 2: Docker
 
 ```bash
-# Build image
-docker build -t pm-agent .
+# Build
+docker build -t remington .
 
-# Run container
-docker run -d --name pm-agent \
+# Run
+docker run -d --name remington \
   --env-file .env \
   -p 8000:8000 \
   --restart unless-stopped \
-  pm-agent
+  remington
 
-# View logs
-docker logs -f pm-agent
+# Logs
+docker logs -f remington
 ```
 
-#### Option 3: Heroku
+### Option 3: Heroku
+
+See [`docs/deployment/HEROKU_DEPLOYMENT.md`](docs/deployment/HEROKU_DEPLOYMENT.md) for complete setup.
 
 ```bash
-# Deploy to Heroku
-heroku create your-pm-agent
+heroku create your-remington
 git push heroku main
-
-# Set environment variables
 heroku config:set ANTHROPIC_API_KEY=sk-ant-...
-heroku config:set ATLASSIAN_CLOUD_ID=...
-
-# View logs
 heroku logs --tail
 ```
-
-See [`docs/deployment/HEROKU_DEPLOYMENT.md`](docs/deployment/HEROKU_DEPLOYMENT.md) for complete Heroku setup.
-
----
-
-## 🔒 Security
-
-### Best Practices
-
-- **Never commit `.env`** - Already in `.gitignore`
-- **Use service accounts** - Not personal credentials
-- **Rotate tokens regularly** - Every 90 days recommended
-- **Least-privilege access** - Only required permissions
-- **Read-only code access** - Agent cannot modify your codebase
-
-### Enforced Restrictions
-
-The agent **CANNOT**:
-- ❌ Modify code in monitored repositories
-- ❌ Commit or push git changes
-- ❌ Merge or approve PRs automatically
-- ❌ Delete or archive Jira tickets
-- ❌ Run destructive commands
-
-Enforced via:
-1. `.claude/settings.local.json` - File access permissions
-2. MCP filesystem server - Read-only paths
-3. Explicit allowlists in orchestrator
 
 ---
 
 ## 📁 Project Structure
 
 ```
-project-manager/
+remington/
 ├── .claude/                    # Agent knowledge base
 │   ├── CLAUDE.md              # Main agent instructions
-│   ├── agents/                # 6 specialized sub-agents
-│   ├── skills/                # Knowledge base (workflows, best practices)
+│   ├── agents/                # 6 specialized sub-agents (AGENT.md)
+│   ├── skills/                # Knowledge domains (SKILL.md)
 │   ├── workflows/             # Automation procedures
-│   └── data/                  # Historical tracking data
+│   └── data/                  # State tracking (SQLite DBs)
 ├── src/
-│   ├── pm_agent_service.py    # Main service entry point
-│   ├── config.py              # Configuration management
-│   ├── orchestration/         # Claude Code integration
-│   ├── monitors/              # Polling monitors (Jira, Slack, Bitbucket)
+│   ├── pm_agent_service.py    # Main entry point
+│   ├── config.py              # Environment config management
+│   ├── orchestration/         # Routes requests to sub-agents
+│   ├── monitors/              # Jira/Slack/Bitbucket polling
 │   ├── database/              # SQLAlchemy models
 │   └── web/                   # FastAPI webhook server
-├── scripts/                   # Helper scripts
+├── scripts/
+│   ├── core/                  # Core automation scripts
+│   └── utilities/             # Helper tools
 ├── tests/                     # Test suite
 ├── docs/                      # Documentation
 ├── .env.example               # Environment template
-├── .mcp.json.example          # MCP server template
 ├── requirements.txt           # Python dependencies
 └── README.md                  # This file
 ```
 
 ---
 
-## 🛠️ Customization
+## 🔒 Security
 
-### Adding Custom Workflows
+### What Remington CAN Do:
 
-1. Create workflow definition: `.claude/workflows/my-workflow.md`
-2. Update relevant sub-agent: `.claude/agents/[subagent]/AGENT.md`
-3. Add skill if needed: `.claude/skills/my-skill/SKILL.md`
-4. Test with manual invocation: `python run_agent.py my-workflow`
+✅ Read Jira tickets and comments
+✅ Post Jira comments and @mention users
+✅ Read Bitbucket PRs and commits
+✅ Post PR review comments
+✅ Post Slack messages
+✅ Update Jira ticket status (via transitions)
 
-### Configuring SLAs
+### What Remington CANNOT Do:
 
-Edit `.env`:
-```bash
-# Business hours
-BUSINESS_HOURS_START=9
-BUSINESS_HOURS_END=17
-BUSINESS_TIMEZONE=America/New_York
+❌ Modify code in repositories
+❌ Commit or push changes
+❌ Merge or approve PRs
+❌ Delete Jira tickets
+❌ Execute shell commands on your servers
 
-# Company holidays (comma-separated YYYY-MM-DD)
-COMPANY_HOLIDAYS=2025-01-01,2025-07-04,2025-12-25
-```
-
-### Team Configuration
-
-**Option 1: Sync from Confluence**
-```bash
-CONFLUENCE_TEAM_PAGE_ID=your-page-id-here
-```
-
-**Option 2: Manual Configuration**
-```bash
-TEAM_MEMBER_NAMES=John Doe,Jane Smith,Bob Johnson
-TEAM_MEMBER_IDS=accountId:123abc,accountId:456def,accountId:789ghi
-```
+**Best Practices:**
+- Use a dedicated service account for Atlassian (not personal)
+- Rotate API tokens every 90 days
+- Never commit `.env` (already in `.gitignore`)
+- Use read-only filesystem permissions where possible
+- Monitor logs for suspicious activity
 
 ---
 
 ## 🐛 Troubleshooting
 
-### Common Issues
-
 **Service won't start:**
 ```bash
-# Check Claude Code CLI is installed
-claude --version
+# Check Python version
+python --version  # Must be 3.11+
 
-# Verify environment variables
-python src/config.py
+# Verify dependencies installed
+pip list | grep anthropic
 
-# Check for port conflicts
-lsof -i :8000
+# Check environment variables
+python -c "from src.config import get_atlassian_config; print(get_atlassian_config())"
 ```
 
-**Mentions not working:**
-- Verify using Jira ADF format for Jira comments
-- Verify using `@{accountId}` format for Bitbucket
-- Check account IDs are correct (use lookup tools)
+**Mentions not detected:**
+- Verify Slack bot has `app_mentions:read` scope
+- Check Jira webhooks are configured correctly
+- Ensure bot account ID is in `.env`
 
-**Database locked:**
+**Database locked errors:**
 ```bash
 # Kill zombie processes
 pkill -f pm_agent_service
 
-# Restart service
-python src/pm_agent_service.py
+# Delete lock files if needed
+rm -f .claude/data/bot-state/*.db-wal
+rm -f .claude/data/bot-state/*.db-shm
 ```
 
-**Polling missing events:**
-- Increase polling frequency in `.env`
-- Check database for duplicates
-- Verify 3-day lookback is working
-
-See [Troubleshooting Guide](docs/TROUBLESHOOTING.md) for more help.
+**SLA violations not escalating:**
+- Check business hours configuration in `.env`
+- Verify holiday dates are in correct format (YYYY-MM-DD)
+- Run manual SLA check: `python run_agent.py sla-check`
 
 ---
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ### Development Setup
 
 ```bash
-# Clone and setup
-git clone https://github.com/yourusername/project-manager.git
-cd project-manager
+git clone https://github.com/ethandrower/remington.git
+cd remington
 python3 -m venv .venv
 source .venv/bin/activate
-
-# Install dev dependencies
-pip install -r requirements-dev.txt
-
-# Run tests
+pip install -r requirements.txt
 pytest tests/ -v
-
-# Run linting
-black src/ tests/
-flake8 src/ tests/
-mypy src/
 ```
 
 ### Submitting Changes
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Run tests (`pytest tests/`)
-5. Commit your changes (`git commit -m 'feat: Add amazing feature'`)
-6. Push to the branch (`git push origin feature/amazing-feature`)
-7. Open a Pull Request
+1. Fork the repo
+2. Create feature branch: `git checkout -b feature/amazing-feature`
+3. Make changes
+4. Run tests: `pytest tests/`
+5. Commit: `git commit -m 'feat: Add amazing feature'`
+6. Push: `git push origin feature/amazing-feature`
+7. Open Pull Request
 
 ---
 
 ## 📚 Documentation
 
-- **[Configuration Guide](docs/CONFIGURATION.md)** - Detailed setup instructions
-- **[Architecture Overview](docs/architecture/)** - System design and components
-- **[API Reference](docs/API.md)** - Webhook endpoints and data formats
-- **[Deployment Guide](docs/deployment/)** - Production deployment options
-- **[Testing Guide](docs/testing/)** - Manual and automated testing
-- **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues and solutions
-
----
-
-## 📊 Metrics & Monitoring
-
-### Performance Metrics
-
-**Response Times:**
-- Webhook acknowledgment: < 100ms
-- Jira comment response: 30-60 seconds (avg)
-- PR code review: 60-90 seconds (avg)
-
-**Accuracy:**
-- SLA compliance detection: 100%
-- Code-ticket alignment: 100%
-- Duplicate prevention: 100% (via database)
-
-### Health Monitoring
-
-```bash
-# Check service status
-curl http://localhost:8000/health
-
-# View database stats
-sqlite3 .claude/data/bot-state/jira_state.db \
-  "SELECT COUNT(*) FROM processed_mentions;"
-
-# Monitor logs
-tail -f pm_agent.log
-```
+- **[Architecture](docs/architecture/)** - System design deep-dive
+- **[Deployment](docs/deployment/)** - Production deployment guides
+- **[Testing](docs/testing/)** - Test plans and procedures
+- **[Configuration](docs/CONFIGURATION.md)** - Complete config reference
 
 ---
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
 ## 🙏 Acknowledgments
 
-- **[Claude Code](https://claude.com/claude-code)** - AI orchestration platform
-- **[Model Context Protocol](https://modelcontextprotocol.io/)** - Integration framework
 - **[Anthropic](https://anthropic.com/)** - Claude AI models
+- **[Atlassian](https://www.atlassian.com/)** - Jira, Bitbucket, Confluence APIs
+- **[Slack](https://slack.com/)** - Team communication platform
 
 ---
 
 ## 📞 Support
 
+- **Issues**: [GitHub Issues](https://github.com/ethandrower/remington/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/ethandrower/remington/discussions)
 - **Documentation**: [docs/](docs/)
-- **Issues**: [GitHub Issues](https://github.com/yourusername/project-manager/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/project-manager/discussions)
 
 ---
 
-## 🗺️ Roadmap
-
-- [ ] Web-based dashboard for metrics and control
-- [ ] Support for GitHub (in addition to Bitbucket)
-- [ ] Multi-language support for messages
-- [ ] Machine learning for SLA prediction
-- [ ] Integration with additional project management tools
-- [ ] Mobile app for on-the-go monitoring
-
-See [ROADMAP.md](docs/ROADMAP.md) for detailed future plans.
-
----
+**Built with ❤️ for overwhelmed project managers**
