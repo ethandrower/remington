@@ -1,10 +1,14 @@
-# Remington - Autonomous Project Manager Agent
+<div align="center">
+  <img src="assets/remington_logo_final.svg" alt="Remington Logo" width="200"/>
 
-> An AI-powered project management assistant that monitors Jira, Bitbucket, and Slack to automate workflows, enforce SLAs, and keep your team on track.
+  # Remington - Autonomous Project Manager Agent
 
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Claude](https://img.shields.io/badge/powered%20by-Claude%20AI-orange.svg)](https://www.anthropic.com/)
+  > An AI-powered project management assistant that monitors Jira, Bitbucket, and Slack to automate workflows, enforce SLAs, and keep your team on track.
+
+  [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+  [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+  [![Claude](https://img.shields.io/badge/powered%20by-Claude%20AI-orange.svg)](https://www.anthropic.com/)
+</div>
 
 ---
 
