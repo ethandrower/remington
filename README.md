@@ -51,28 +51,109 @@ Remington is an autonomous agent that acts as your project manager's assistant. 
 
 ### How to Interact with Remington
 
-**In Jira:**
+Tag Remington in any comment to get instant, context-aware responses.
+
+#### Example: Jira Comment Interaction
+
+**You comment on PROJ-456:**
 ```
-Comment on any ticket: "@remington what's the status of this?"
-→ Remington reads the full ticket context and posts a detailed response
+@remington what's blocking this ticket?
 ```
 
-**In Slack:**
+**Remington responds (30-60 seconds later):**
 ```
-In any channel: "@remington when is PROJ-123 due?"
-→ Remington fetches ticket details from Jira and responds in thread
+Hi @john.doe! I've reviewed PROJ-456 and found the following blockers:
+
+🚧 Current Blockers:
+• Waiting on API endpoint design from backend team (mentioned in comment from Jan 3)
+• Database schema needs approval from @tech-lead (flagged in description)
+
+📋 Recent Activity:
+• Last updated 2 days ago by @jane.smith
+• Status: Blocked → waiting for dependencies
+• No commits in last 5 days
+
+💡 Recommendation:
+1. Ping @backend-team in #engineering channel about API design
+2. Schedule 15-min sync with @tech-lead for schema approval
+3. Consider splitting frontend work into separate ticket to unblock progress
+
+Would you like me to create follow-up tickets for the unblocked work?
 ```
 
-**In Bitbucket:**
+#### Example: Slack Thread Interaction
+
+**You post in #engineering:**
 ```
-Comment on PR: "@remington review this code"
-→ Remington analyzes the diff and posts review comments
+@Remington what's the status of PROJ-123?
 ```
 
-**Important:** Use the exact bot mention format for your platform:
+**Remington responds in thread:**
+```
+📊 PROJ-123: Implement user authentication
+
+Status: In Progress
+Assignee: @developer
+Due Date: Tomorrow (Jan 7, 2026) ⚠️
+
+Recent Activity:
+✅ Last commit: 2 hours ago (OAuth2 implementation)
+✅ PR opened: PR-89 "Add Google OAuth"
+⚠️ Still missing: Microsoft OAuth provider (per requirements)
+
+Timeline Risk: MEDIUM
+• 1 day remaining
+• Core work complete, but additional provider needed
+• May need deadline extension or scope reduction
+
+Next Steps:
+1. Confirm with @product-manager if Microsoft OAuth is required for v1
+2. If yes: Request 2-day extension
+3. If no: Mark as complete and create follow-up ticket
+
+Jira Link: https://your-company.atlassian.net/browse/PROJ-123
+```
+
+#### Example: Bitbucket PR Interaction
+
+**You comment on PR-45:**
+```
+@remington review this code
+```
+
+**Remington posts review (60-90 seconds later):**
+```
+Code Review for PR-45: Add payment processing
+
+✅ Overall: Looks good with minor suggestions
+
+🔒 Security:
+• Consider using environment variables for API keys instead of config.py
+• Add input validation for payment amounts (prevent negative values)
+
+🎯 Best Practices:
+• Add error handling for payment gateway timeouts
+• Consider adding retry logic with exponential backoff
+
+📝 Code Quality:
+• Well-structured and readable
+• Good test coverage (85%)
+• Documentation is clear
+
+✨ Nice work:
+• Proper use of async/await patterns
+• Comprehensive error messages
+• Good logging for debugging
+
+Recommendation: ✅ Approve with minor fixes
+
+@author please address security items before merge.
+```
+
+**Important - Mention Formats:**
 - **Jira**: `@remington` (uses Jira account ID internally)
-- **Slack**: `@Remington` or `<@U09BVV00XRP>` (your bot's user ID)
-- **Bitbucket**: `@{bot-account-id}` (Bitbucket UUID format)
+- **Slack**: `@Remington` (your bot's display name)
+- **Bitbucket**: `@{bot-account-uuid}` (format varies by platform)
 
 ---
 
@@ -104,41 +185,266 @@ When an SLA is violated, Remington escalates automatically:
 | **Level 3** | 2-3 days overdue | Team escalation | Jira + Slack + @tech-lead |
 | **Level 4** | 3+ days overdue | Leadership alert | Jira + Slack + @leadership |
 
+#### Example SLA Violation Messages
+
+**Level 1 - Jira Comment (Friendly Reminder):**
+```
+👋 Hi @developer!
+
+Just a friendly reminder - this comment has been waiting for a response for 1 business day.
+
+Original question from @stakeholder (Jan 5):
+"Can we add export to PDF feature by end of sprint?"
+
+Could you provide a quick update when you have a moment? Thanks!
+
+⏱️ SLA: 2 business days (1 day elapsed)
+```
+
+**Level 2 - Jira + Slack DM:**
+
+*Jira Comment:*
+```
+⚠️ Hi @developer,
+
+This comment is now 2 business days overdue for a response.
+
+Original question from @stakeholder (Jan 3):
+"What's the ETA on the API integration?"
+
+Could you please prioritize a response today? I've also sent you a Slack DM.
+
+⏱️ SLA: 2 business days (2 days overdue)
+📌 Escalation: Level 2
+```
+
+*Slack DM to developer:*
+```
+Hi! 👋
+
+PROJ-456 has a comment that needs your attention - it's now 2 days overdue.
+
+Question from @stakeholder: "What's the ETA on the API integration?"
+
+Link: https://your-company.atlassian.net/browse/PROJ-456
+
+Could you please respond today? Let me know if you need help!
+```
+
+**Level 3 - Team Escalation (Jira + Slack Channel):**
+
+*Jira Comment:*
+```
+🚨 ESCALATION - Level 3
+
+@developer, @tech-lead - This comment requires immediate attention.
+
+Original question from @stakeholder (Jan 1):
+"Is this feature ready for release?"
+
+⏱️ Status:
+• SLA Target: 2 business days
+• Time Overdue: 3 business days
+• Escalation Level: 3 of 4
+
+@tech-lead: Please ensure this gets a response today or reassign if needed.
+@developer: If you're blocked, please update the ticket status.
+
+📍 Link: PROJ-456
+```
+
+*Slack Message in #engineering:*
+```
+🚨 SLA Escalation - Level 3
+
+PROJ-456 needs immediate attention from @developer
+
+• Comment from @stakeholder has been waiting 3 business days
+• Question: "Is this feature ready for release?"
+• SLA Target: 2 business days (3 days overdue)
+
+@tech-lead FYI - may need reassignment or prioritization
+
+Link: https://your-company.atlassian.net/browse/PROJ-456
+```
+
+**Level 4 - Leadership Alert:**
+
+*Slack Message in #engineering + #leadership:*
+```
+🚨🚨 CRITICAL SLA VIOLATION - Level 4 🚨🚨
+
+PROJ-456 has exceeded maximum escalation threshold
+
+📋 Details:
+• Stakeholder: @stakeholder
+• Developer: @developer
+• Question: "Is this feature ready for release?"
+• SLA Target: 2 business days
+• Time Overdue: 4+ business days
+
+⚠️ This may impact sprint commitments and stakeholder trust.
+
+@leadership @tech-lead - Immediate action required
+@developer - Please respond ASAP or escalate blockers
+
+Link: https://your-company.atlassian.net/browse/PROJ-456
+```
+
 ---
 
 ## 🤖 Automated Workflows
 
 ### Daily Standup (Weekdays at 9 AM)
 
-Remington automatically posts a comprehensive standup report to Slack:
+Every weekday at 9 AM, Remington automatically posts a comprehensive standup report to your configured Slack channel. This report is the **heartbeat** of your sprint - it surfaces issues before they become blockers.
 
-1. **Code-Ticket Gap Detection** - Finds commits without associated Jira tickets
-2. **Productivity Audit** - Analyzes work quality over the last 7 days
-3. **Team Timesheet Review** - Validates logged time vs actual work
-4. **SLA Violations** - Lists all current violations and pending escalations
-5. **Deadline Risk Dashboard** - Highlights tickets at risk of missing deadlines
+#### What Gets Analyzed
 
-**Example Output:**
+The standup workflow runs 5 sub-analyses:
+
+1. **Code-Ticket Gap Detection** - Finds commits without associated Jira tickets (shadow work)
+2. **Productivity Audit** - Reviews code complexity vs timesheet entries over last 7 days
+3. **Team Capacity Analysis** - Checks if team is overloaded or underutilized
+4. **SLA Compliance Check** - Lists all active violations and pending escalations
+5. **Deadline Risk Assessment** - Flags tickets at risk of missing due dates
+
+#### Example Daily Standup Report
+
+**Posted to #standup channel at 9:00 AM:**
+
 ```
-🌅 Daily Standup Report - January 6, 2026
+🌅 Daily Standup Report - Monday, January 6, 2026
 
-📊 Sprint Health:
-  • Sprint: Sprint 42 (Jan 1-14)
-  • Completed: 23/40 points (58%)
-  • On track for 85% completion
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📊 SPRINT HEALTH: Sprint 42 (Jan 1-14, 2026)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-⚠️ SLA Violations:
-  • PROJ-456: PR review waiting 3 days (Level 3 escalation sent)
-  • PROJ-789: Blocked ticket needs update (Level 1 reminder)
+Progress: ████████████░░░░░░░░ 58% (23/40 points)
+Velocity: 16 points/week (avg: 18) - slightly below target
+Days Remaining: 9 days
+Forecast: ✅ On track for 85% completion
 
-🎯 Deadline Risks:
-  • PROJ-123: Due tomorrow, still "In Progress"
-  • PROJ-234: Due in 3 days, no commits in 5 days
+🎯 Top Priorities Today:
+1. PROJ-456 - Payment gateway integration (8 points, due Wed)
+2. PROJ-789 - Fix login bug (5 points, BLOCKED ⚠️)
+3. PROJ-234 - User profile page (3 points, due Friday)
 
-👥 Team Activity:
-  • 15 commits yesterday
-  • 3 PRs merged
-  • 12 Jira updates
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🚨 SLA VIOLATIONS (3 active)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️ CRITICAL (Level 3):
+• PROJ-456: PR review waiting 3 business days
+  - PR-89 by @developer-a needs review from @tech-lead
+  - Action: Escalated to #engineering + @tech-lead
+  - Link: https://bitbucket.org/yourcompany/repo/pull/89
+
+⚠️ MEDIUM (Level 2):
+• PROJ-789: Blocked ticket with no update for 2 days
+  - Waiting on backend API from @developer-b
+  - Action: Jira comment + Slack DM sent
+  - Link: https://your-company.atlassian.net/browse/PROJ-789
+
+ℹ️ LOW (Level 1):
+• PROJ-123: Comment response overdue by 1 day
+  - Stakeholder question about PDF export timeline
+  - Action: Friendly Jira reminder posted
+  - Link: https://your-company.atlassian.net/browse/PROJ-123
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⏰ DEADLINE RISKS (2 tickets at risk)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔴 HIGH RISK - PROJ-456 (due in 2 days):
+• Status: In Progress (75% complete per last update)
+• Last commit: 18 hours ago
+• Risk: PR-89 still needs review (see SLA violations above)
+• Recommendation: Expedite PR review or request 2-day extension
+
+🟡 MEDIUM RISK - PROJ-234 (due in 5 days):
+• Status: In Progress
+• Last commit: 5 days ago ⚠️ (stale)
+• Assignee: @developer-c
+• Risk: No recent activity, may be blocked
+• Recommendation: Check in with @developer-c for status update
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📈 TEAM ACTIVITY (Last 24 Hours)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Code Activity:
+• 18 commits across 3 repositories
+• 4 PRs opened, 3 PRs merged
+• 127 lines added, 43 lines removed
+• Most active: @developer-a (8 commits)
+
+Jira Activity:
+• 12 tickets updated
+• 3 tickets moved to Done
+• 2 new tickets created
+• 5 comments posted
+
+Top Contributors:
+🥇 @developer-a - 8 commits, 2 PRs merged
+🥈 @developer-b - 6 commits, 1 PR opened
+🥉 @developer-c - 4 commits, 1 ticket completed
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔍 CODE-TICKET GAP ANALYSIS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️ Found 2 commits without Jira ticket references:
+
+1. Commit abc123f by @developer-b (yesterday 3:45 PM)
+   "Fix typo in user service"
+   → Consider creating ticket or adding to existing work log
+
+2. Commit def456a by @developer-c (yesterday 11:20 AM)
+   "Update dependencies"
+   → Consider adding PROJ-MAINTENANCE-456 reference
+
+💡 Reminder: Include ticket number in commit messages (e.g., "PROJ-123: Add feature")
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ ACTION ITEMS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. @tech-lead: Review PR-89 today (blocking PROJ-456)
+2. @developer-b: Update PROJ-789 status or unblock
+3. @developer-c: Check in on PROJ-234 (no commits in 5 days)
+4. @all: Link commits to Jira tickets when possible
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💬 Questions or issues? Tag @Remington in any channel
+📊 Full sprint analysis: `python run_agent.py sprint-analysis`
+```
+
+#### How It Works
+
+**Automatic Execution:**
+1. Cron job triggers at 9:00 AM (weekdays only)
+2. Remington runs the standup orchestrator workflow
+3. Gathers data from Jira, Bitbucket, and local git repositories
+4. Analyzes SLA compliance, deadline risks, and team activity
+5. Formats report and posts to configured Slack channel
+6. Takes ~30-60 seconds total
+
+**Manual Invocation:**
+```bash
+# Run standup report manually (useful for testing)
+python run_agent.py standup
+
+# Output will be posted to Slack
+```
+
+**Configuration:**
+```bash
+# In .env file
+SLACK_CHANNEL_STANDUP=C123ABC456  # Channel ID for standup posts
+BUSINESS_HOURS_START=9            # Report posts at this hour
+BUSINESS_TIMEZONE=America/New_York
 ```
 
 ### Continuous Monitoring
