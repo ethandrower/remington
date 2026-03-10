@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 450">
+  <defs>
+    <!-- Gradient for the butler's outfit -->
+    <linearGradient id="suitGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#2d3748"/>
+      <stop offset="100%" style="stop-color:#1a202c"/>
+    </linearGradient>
+    
+    <!-- Gradient for the top hat -->
+    <linearGradient id="hatGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="50%" style="stop-color:#0f0f1a"/>
+      <stop offset="100%" style="stop-color:#1a1a2e"/>
+    </linearGradient>
+    
+    <!-- Subtle glow for tech elements -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    
+    <!-- Circuit pattern -->
+    <pattern id="circuit" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M0 10 H8 M12 10 H20 M10 0 V8 M10 12 V20" stroke="#4fd1c5" stroke-width="0.5" opacity="0.3"/>
+      <circle cx="10" cy="10" r="1.5" fill="#4fd1c5" opacity="0.4"/>
+    </pattern>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="200" cy="210" r="190" fill="#0d1117"/>
+  <circle cx="200" cy="210" r="190" fill="url(#circuit)"/>
+  <circle cx="200" cy="210" r="190" fill="none" stroke="#4fd1c5" stroke-width="2" opacity="0.6"/>
+  
+  <!-- TOP HAT -->
+  <!-- Hat brim -->
+  <ellipse cx="200" cy="78" rx="70" ry="12" fill="url(#hatGradient)"/>
+  <ellipse cx="200" cy="76" rx="70" ry="12" fill="#1a1a2e"/>
+  <!-- Hat body -->
+  <rect x="155" y="15" width="90" height="63" fill="url(#hatGradient)" rx="3"/>
+  <!-- Hat top -->
+  <ellipse cx="200" cy="15" rx="45" ry="8" fill="#1a1a2e"/>
+  <!-- Hat band with tech accent -->
+  <rect x="155" y="58" width="90" height="12" fill="#2d3748"/>
+  <rect x="155" y="62" width="90" height="4" fill="#4fd1c5" opacity="0.7"/>
+  <!-- Subtle hat shine -->
+  <path d="M165 25 Q200 20 235 25 L235 55 Q200 50 165 55 Z" fill="#2a2a4a" opacity="0.3"/>
+  
+  <!-- Butler silhouette - head -->
+  <ellipse cx="200" cy="125" rx="45" ry="50" fill="#e2e8f0"/>
+  
+  <!-- Monocle - tech style -->
+  <circle cx="222" cy="118" r="18" fill="none" stroke="#4fd1c5" stroke-width="3" filter="url(#glow)"/>
+  <circle cx="222" cy="118" r="12" fill="#0d1117" opacity="0.5"/>
+  <circle cx="222" cy="118" r="6" fill="#4fd1c5" opacity="0.8"/>
+  <!-- Monocle chain -->
+  <path d="M240 118 Q260 140 245 170" stroke="#4fd1c5" stroke-width="1.5" fill="none" opacity="0.6"/>
+  
+  <!-- Eyes -->
+  <ellipse cx="182" cy="118" rx="8" ry="10" fill="#1a202c"/>
+  <circle cx="184" cy="116" r="3" fill="#4fd1c5" filter="url(#glow)"/>
+  
+  <!-- HANDLEBAR MUSTACHE -->
+  <!-- Main mustache body -->
+  <path d="M175 145 Q200 155 225 145" stroke="#3d2314" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <!-- Left curl -->
+  <path d="M175 145 Q158 140 150 148 Q145 158 152 162 Q160 163 165 155" 
+        stroke="#3d2314" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <!-- Right curl -->
+  <path d="M225 145 Q242 140 250 148 Q255 158 248 162 Q240 163 235 155" 
+        stroke="#3d2314" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <!-- Mustache center detail -->
+  <ellipse cx="200" cy="148" rx="8" ry="4" fill="#3d2314"/>
+  
+  <!-- Subtle smile (moved down a bit) -->
+  <path d="M188 158 Q200 163 212 158" stroke="#1a202c" stroke-width="2" fill="none" stroke-linecap="round"/>
+  
+  <!-- Eyebrow raised (knowing look) -->
+  <path d="M170 102 Q182 95 195 100" stroke="#1a202c" stroke-width="3" fill="none" stroke-linecap="round"/>
+  <path d="M210 98 Q225 92 238 100" stroke="#1a202c" stroke-width="3" fill="none" stroke-linecap="round"/>
+  
+  <!-- Butler outfit - shoulders and torso -->
+  <path d="M105 340 Q100 260 140 200 Q170 175 200 175 Q230 175 260 200 Q300 260 295 340" 
+        fill="url(#suitGradient)"/>
+  
+  <!-- Lapels -->
+  <path d="M165 185 L200 260 L175 340" fill="#1a202c"/>
+  <path d="M235 185 L200 260 L225 340" fill="#1a202c"/>
+  
+  <!-- White shirt visible -->
+  <path d="M175 190 L200 270 L225 190" fill="#f7fafc"/>
+  
+  <!-- Bow tie -->
+  <path d="M180 188 L200 198 L220 188 L200 193 Z" fill="#4fd1c5"/>
+  <path d="M180 208 L200 198 L220 208 L200 203 Z" fill="#4fd1c5"/>
+  <circle cx="200" cy="198" r="6" fill="#0d1117"/>
+  <circle cx="200" cy="198" r="3" fill="#4fd1c5" filter="url(#glow)"/>
+  
+  <!-- Serving tray arm -->
+  <path d="M295 260 Q340 240 350 220" stroke="#e2e8f0" stroke-width="20" fill="none" stroke-linecap="round"/>
+  
+  <!-- White glove/hand -->
+  <ellipse cx="355" cy="215" rx="25" ry="15" fill="#f7fafc" transform="rotate(-20 355 215)"/>
+  
+  <!-- Serving tray -->
+  <ellipse cx="355" cy="190" rx="50" ry="15" fill="#718096"/>
+  <ellipse cx="355" cy="185" rx="50" ry="15" fill="#a0aec0"/>
+  <ellipse cx="355" cy="185" rx="45" ry="12" fill="#718096"/>
+  
+  <!-- Terminal/Kanban on tray -->
+  <rect x="325" y="160" rx="3" ry="3" width="60" height="35" fill="#1a202c"/>
+  <rect x="328" y="163" rx="2" ry="2" width="54" height="29" fill="#0d1117"/>
+  
+  <!-- Terminal content - task items -->
+  <rect x="332" y="168" width="8" height="6" fill="#48bb78" rx="1"/>
+  <rect x="343" y="168" width="20" height="2" fill="#4fd1c5"/>
+  <rect x="343" y="172" width="15" height="2" fill="#4a5568"/>
+  
+  <rect x="332" y="178" width="8" height="6" fill="#ecc94b" rx="1"/>
+  <rect x="343" y="178" width="18" height="2" fill="#4fd1c5"/>
+  <rect x="343" y="182" width="12" height="2" fill="#4a5568"/>
+  
+  <!-- Blinking cursor -->
+  <rect x="332" y="188" width="6" height="2" fill="#4fd1c5" filter="url(#glow)">
+    <animate attributeName="opacity" values="1;0;1" dur="1s" repeatCount="indefinite"/>
+  </rect>
+  
+  <!-- Text background for better readability -->
+  <rect x="50" y="395" width="300" height="50" fill="#0d1117" rx="5" opacity="0.9"/>
+  
+  <!-- Text: REMINGTON -->
+  <text x="200" y="420" font-family="Georgia, serif" font-size="30" fill="#f7fafc" text-anchor="middle" font-weight="bold" letter-spacing="4">REMINGTON</text>
+  
+  <!-- Tagline -->
+  <text x="200" y="440" font-family="monospace" font-size="11" fill="#4fd1c5" text-anchor="middle" opacity="0.9">AT YOUR SERVICE</text>
+</svg>

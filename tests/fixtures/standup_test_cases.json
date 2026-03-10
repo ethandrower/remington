@@ -1,0 +1,314 @@
+{
+  "description": "Real standup messages from Slack for TDD testing",
+  "test_cases": [
+    {
+      "id": "standup_1",
+      "input": {
+        "message_text": "20 Jan\nWorked on:\n\u2022 ECD-917: 0.5H\n    \u25e6 Merged with develop branch, merged migration, Deployed staging and Tested\n\u2022 ECD-924: 6.5H\n    \u25e6 Added service and helper for multi-LLM support \n    \u25e6 Added APIs for batching\n    \u25e6 Made ready for feature automatic extraction from scraping\n    \u25e6 Polished UI\n    \u25e6 Merged with develop branch, Merged migration, Deployed staging, Prepared a demo, Made a PR\nPlan to work:\n\u2022 ECD-935\nBlocker:\n\u2022 <https://bitbucket.org/citemed/citemed_web/pull-requests/199> should be merged to start ECD-935, \n\u2022 other tickets to work",
+        "user_id": "U09UB2CDKGT",
+        "timestamp": "1768992048.237109"
+      },
+      "expected_output": {
+        "standup_date": "2026-01-20",
+        "completed_work": [
+          {
+            "ticket_id": "ECD-917",
+            "hours": 0.5,
+            "description": "Merged with develop branch, merged migration, Deployed staging and Tested"
+          },
+          {
+            "ticket_id": "ECD-924",
+            "hours": 6.5,
+            "description": "Added service and helper for multi-LLM support, Added APIs for batching, Made ready for feature automatic extraction from scraping, Polished UI, Merged with develop branch, Merged migration, Deployed staging, Prepared a demo, Made a PR"
+          }
+        ],
+        "planned_work": [
+          "ECD-935"
+        ],
+        "blockers": "PR #199 should be merged to start ECD-935, other tickets to work",
+        "notes": null
+      }
+    },
+    {
+      "id": "standup_2",
+      "input": {
+        "message_text": "*MID SPRINT CHECK UP - V.5.5.8 (12/Jan/26 -  02/Feb/26)*\n\n*TASK STATUS*                     *AMOUNT OF DEV WORK*\n\nCOMPLETED                      2d 4h 30m (26 tasks closed)\n\nUNDER QA                          1w 2d 1h\n\nPENDING APPROVAL       4d 3h\n\nIN PROGRESS -                   2d 3h 30min\n\nREADY FOR DEV                 6d\n\n\nthere are other tasks as well that are either BLOCKED, either have no estimate (mostly bugs).\n\n\n\n`important issues to discuss and provide a product overview:`\n\n`ECD-690`\n`ECD-691`\n\n<https://www.loom.com/share/6379e8e029024d7197ab8b12fb09c116|Demo Link>\n\n---\n\n <https://citemed.atlassian.net/browse/ECD-1047> - also Ethan\u2019s input needed.\n\n<!channel>\n\n<@U02Q6D97QCW> if I may have missed any comments on any tasks or PRs, let me know in the thread (Or if there are any tasks specifically that are blocking you and the team, and that require further product input)",
+        "user_id": "U0A7FKK03NU",
+        "timestamp": "1768991931.818979"
+      },
+      "expected_output": {
+        "standup_date": null,
+        "completed_work": [],
+        "planned_work": [],
+        "blockers": null,
+        "notes": "Mid-sprint check-up for V.5.5.8. Sprint stats: 26 tasks closed (2d 4h 30m completed work). Discussion items: ECD-690, ECD-691, ECD-1047"
+      }
+    },
+    {
+      "id": "standup_3",
+      "input": {
+        "message_text": "20 Jan\nWorked on :\n\u2022 ECD-828 PR1 comments\n    \u25e6 company field m2m migration : 2H\n\u2022 ECD-703 PR1 comments : 5H\nPlan to work on :\n\u2022 ECD-828 PR2 comments\n\u2022 ECD-656, ECD-991, ECD-978 comments\nBlockers:\n\u2022 None",
+        "user_id": "U09A0R81AQL",
+        "timestamp": "1768982315.089029"
+      },
+      "expected_output": {
+        "standup_date": "2026-01-20",
+        "completed_work": [
+          {
+            "ticket_id": "ECD-828",
+            "hours": 2.0,
+            "description": "PR1 comments - company field m2m migration"
+          },
+          {
+            "ticket_id": "ECD-703",
+            "hours": 5.0,
+            "description": "PR1 comments"
+          }
+        ],
+        "planned_work": [
+          "ECD-828",
+          "ECD-656",
+          "ECD-991",
+          "ECD-978"
+        ],
+        "blockers": "None",
+        "notes": null
+      }
+    },
+    {
+      "id": "standup_4",
+      "input": {
+        "message_text": "19-20 Jan\n\nWorked on:\n- Review backlog issues for v5.5.8 and answer comments / questions / and slack messages ~ 2H\n- PR Review ECD-872: Rename Client model to Company across the application ~ 3H\n- PR Review ECD-828 PR 1 (Device API &amp; Core frontend structure) ~ 2H\n- PR Review ECD-828 PR 2 (Device List UI Components) ~ 30min\n- PR Review ECD-917 Optimize articles list performance ~ 30min\n- PR Review: ECD-656: allow direct full text upload in 1st screening, article details view, clinical appraisal details view ~ 30min\n- PR Review ECD-703 PR 1 (Users Page FE &amp; BE) ~ 2H\n- ECD-1063 Q1 2026 Bugs ~ 1.5H\n\nPlanning to work on next:\n- PR Reviews\n- More bug fixes\n\nAny blockers\nNone",
+        "user_id": "U02Q6D97QCW",
+        "timestamp": "1768981719.275379"
+      },
+      "expected_output": {
+        "standup_date": "2026-01-20",
+        "completed_work": [
+          {
+            "ticket_id": "ECD-872",
+            "hours": 3.0,
+            "description": "PR Review: Rename Client model to Company across the application"
+          },
+          {
+            "ticket_id": "ECD-828",
+            "hours": 2.0,
+            "description": "PR Review PR 1 (Device API & Core frontend structure)"
+          },
+          {
+            "ticket_id": "ECD-828",
+            "hours": 0.5,
+            "description": "PR Review PR 2 (Device List UI Components)"
+          },
+          {
+            "ticket_id": "ECD-917",
+            "hours": 0.5,
+            "description": "PR Review: Optimize articles list performance"
+          },
+          {
+            "ticket_id": "ECD-656",
+            "hours": 0.5,
+            "description": "PR Review: allow direct full text upload in 1st screening, article details view, clinical appraisal details view"
+          },
+          {
+            "ticket_id": "ECD-703",
+            "hours": 2.0,
+            "description": "PR Review PR 1 (Users Page FE & BE)"
+          },
+          {
+            "ticket_id": "ECD-1063",
+            "hours": 1.5,
+            "description": "Q1 2026 Bugs"
+          }
+        ],
+        "planned_work": [],
+        "blockers": "None",
+        "notes": "Also worked on: Review backlog issues for v5.5.8 and answer comments/questions/slack messages (2H)"
+      }
+    },
+    {
+      "id": "standup_5",
+      "input": {
+        "message_text": "19 Jan\nWorked on:\n\u2022 ECD-872: 1.5H\n    \u25e6 updated with migration with Django standard migration\n\u2022 ECD-924: 5.5H\n    \u25e6 Reviewed requirements, Got access to ai_backend repo, Local setup to use AI package by upgrading package version\n    \u25e6 Added celery task with retry, error handling, meta_data tracking\n    \u25e6 Added APIs for fetching abstract and the pooling status\n    \u25e6 Added fetching action buttons and status, error handling, status badge etc\nPlan to work\n\u2022 ECD-917\n\u2022 ECD-924\n",
+        "user_id": "U09UB2CDKGT",
+        "timestamp": "1768904661.830929"
+      },
+      "expected_output": {
+        "standup_date": "2026-01-19",
+        "completed_work": [
+          {
+            "ticket_id": "ECD-872",
+            "hours": 1.5,
+            "description": "Updated with migration with Django standard migration"
+          },
+          {
+            "ticket_id": "ECD-924",
+            "hours": 5.5,
+            "description": "Reviewed requirements, Got access to ai_backend repo, Local setup to use AI package by upgrading package version, Added celery task with retry, error handling, meta_data tracking, Added APIs for fetching abstract and the pooling status, Added fetching action buttons and status, error handling, status badge etc"
+          }
+        ],
+        "planned_work": [
+          "ECD-917",
+          "ECD-924"
+        ],
+        "blockers": null,
+        "notes": null
+      }
+    },
+    {
+      "id": "standup_6",
+      "input": {
+        "message_text": "19 Jan\nWorked on :\n\u2022 ECD-656, ECD-1053 worked on comment : 2H\n\u2022 ECD-828 PR1 comments : 5H\n    \u25e6 client -> company migration\n    \u25e6 remove try catch\n    \u25e6 consolidate device audit log functions\n    \u25e6 make format_device_audit_actions as utility function\nPlan to work on :\n\u2022 ECD-828\n\u2022 ECD-1070\nBlockers:\n\u2022 None",
+        "user_id": "U09A0R81AQL",
+        "timestamp": "1768895882.520489"
+      },
+      "expected_output": {
+        "standup_date": "2026-01-19",
+        "completed_work": [
+          {
+            "ticket_id": "ECD-656",
+            "hours": 1.0,
+            "description": "Worked on comment"
+          },
+          {
+            "ticket_id": "ECD-1053",
+            "hours": 1.0,
+            "description": "Worked on comment"
+          },
+          {
+            "ticket_id": "ECD-828",
+            "hours": 5.0,
+            "description": "PR1 comments - client -> company migration, remove try catch, consolidate device audit log functions, make format_device_audit_actions as utility function"
+          }
+        ],
+        "planned_work": [
+          "ECD-828",
+          "ECD-1070"
+        ],
+        "blockers": "None",
+        "notes": null
+      }
+    },
+    {
+      "id": "standup_7",
+      "input": {
+        "message_text": "16 - 18 Jan\nWorked on\n\u2022 ECD-917: Upgrade to zero-downtime migration, Add error handling, Fix logging: 1H\n\u2022 ECD-934, ECD-935, ECD-1084, ECD-1085: Review requirements, Figma Designs, Codebase: 2H\nPlan to work\n\u2022 ECD-924",
+        "user_id": "U09UB2CDKGT",
+        "timestamp": "1768816211.006579"
+      },
+      "expected_output": {
+        "standup_date": "2026-01-18",
+        "completed_work": [
+          {
+            "ticket_id": "ECD-917",
+            "hours": 1.0,
+            "description": "Upgrade to zero-downtime migration, Add error handling, Fix logging"
+          },
+          {
+            "ticket_id": "ECD-934",
+            "hours": 0.5,
+            "description": "Review requirements, Figma Designs, Codebase"
+          },
+          {
+            "ticket_id": "ECD-935",
+            "hours": 0.5,
+            "description": "Review requirements, Figma Designs, Codebase"
+          },
+          {
+            "ticket_id": "ECD-1084",
+            "hours": 0.5,
+            "description": "Review requirements, Figma Designs, Codebase"
+          },
+          {
+            "ticket_id": "ECD-1085",
+            "hours": 0.5,
+            "description": "Review requirements, Figma Designs, Codebase"
+          }
+        ],
+        "planned_work": [
+          "ECD-924"
+        ],
+        "blockers": null,
+        "notes": null
+      }
+    },
+    {
+      "id": "standup_8",
+      "input": {
+        "message_text": "17-18 Jan\nWorked on :\n\u2022 ECD-991, ECD-989, ECD-1053 : 3H\nPlan to work on :\n\u2022 resolve comments on PRs\nBlockers:\n\u2022 None",
+        "user_id": "U09A0R81AQL",
+        "timestamp": "1768807685.936839"
+      },
+      "expected_output": {
+        "standup_date": "2026-01-18",
+        "completed_work": [
+          {
+            "ticket_id": "ECD-991",
+            "hours": 1.0,
+            "description": "Work on ticket"
+          },
+          {
+            "ticket_id": "ECD-989",
+            "hours": 1.0,
+            "description": "Work on ticket"
+          },
+          {
+            "ticket_id": "ECD-1053",
+            "hours": 1.0,
+            "description": "Work on ticket"
+          }
+        ],
+        "planned_work": [],
+        "blockers": "None",
+        "notes": null
+      }
+    },
+    {
+      "id": "standup_9",
+      "input": {
+        "message_text": "15-16 Jan\nWorked on :\n\u2022 ECD-828 <https://bitbucket.org/citemed/citemed_web/pull-requests/198|PR> : 6H\n    \u25e6 <https://bitbucket.org/citemed/citemed_web/pull-requests/199>\n    \u25e6 <https://bitbucket.org/citemed/citemed_web/pull-requests/200>\n    \u25e6 <https://bitbucket.org/citemed/citemed_web/pull-requests/201>\n    \u25e6 <https://bitbucket.org/citemed/citemed_web/pull-requests/202>\n\u2022 ECD-703 <https://bitbucket.org/citemed/citemed_web/pull-requests/194|PR> : 6H\n    \u25e6 <https://bitbucket.org/citemed/citemed_web/pull-requests/195>\n    \u25e6 <https://bitbucket.org/citemed/citemed_web/pull-requests/196>\n    \u25e6 <https://bitbucket.org/citemed/citemed_web/pull-requests/197>\nPlan to work on :\n\u2022 Open PRs\nBlockers:\n\u2022 None",
+        "user_id": "U09A0R81AQL",
+        "timestamp": "1768640203.022429"
+      },
+      "expected_output": {
+        "standup_date": "2026-01-16",
+        "completed_work": [
+          {
+            "ticket_id": "ECD-828",
+            "hours": 6.0,
+            "description": "PR work - Multiple PRs (#198, #199, #200, #201, #202)"
+          },
+          {
+            "ticket_id": "ECD-703",
+            "hours": 6.0,
+            "description": "PR work - Multiple PRs (#194, #195, #196, #197)"
+          }
+        ],
+        "planned_work": [],
+        "blockers": "None",
+        "notes": null
+      }
+    },
+    {
+      "id": "standup_10",
+      "input": {
+        "message_text": "14-16 Jan\n\nWorked on:\n- Review V5.5.8 Jira Tasks &amp; Refinements ~ 2.5H\n- ECD-1063 Q1 2026 Bugs ~ 6H\n- Demo env test &amp; bug fixes ~ 1H\n\n\nPlanning to work on next:\n- PR Reviews\n- Engineering Evidence for SOC-2 compliance\n\nAny blockers\nNone",
+        "user_id": "U02Q6D97QCW",
+        "timestamp": "1768603663.974149"
+      },
+      "expected_output": {
+        "standup_date": "2026-01-16",
+        "completed_work": [
+          {
+            "ticket_id": "ECD-1063",
+            "hours": 6.0,
+            "description": "Q1 2026 Bugs"
+          }
+        ],
+        "planned_work": [],
+        "blockers": "None",
+        "notes": "Also worked on: Review V5.5.8 Jira Tasks & Refinements (2.5H), Demo env test & bug fixes (1H)"
+      }
+    }
+  ]
+}

@@ -1,0 +1,114 @@
+{
+  "name": "PM Agent",
+  "description": "Autonomous project management agent — monitors sprints, enforces SLAs, and automates standup workflows for any Jira/Slack team.",
+  "keywords": ["project-management", "jira", "atlassian", "slack", "automation", "agile"],
+  "stack": "heroku-24",
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ],
+  "formation": {
+    "worker": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  },
+  "env": {
+    "ANTHROPIC_API_KEY": {
+      "description": "Anthropic API key for Claude agent reasoning",
+      "required": true
+    },
+    "ATLASSIAN_SERVICE_ACCOUNT_EMAIL": {
+      "description": "Atlassian service account email (bot account) for API access",
+      "required": true
+    },
+    "ATLASSIAN_SERVICE_ACCOUNT_TOKEN": {
+      "description": "Atlassian API token for the service account",
+      "required": true
+    },
+    "ATLASSIAN_CLOUD_ID": {
+      "description": "Atlassian Cloud ID — found in your Atlassian admin URL",
+      "required": true
+    },
+    "JIRA_INSTANCE_URL": {
+      "description": "Your Jira instance URL (e.g. https://your-company.atlassian.net)",
+      "required": true
+    },
+    "ATLASSIAN_PROJECT_KEY": {
+      "description": "Jira project key to monitor (e.g. PROJ)",
+      "required": true
+    },
+    "SERVICE_ACCOUNT_NAME": {
+      "description": "Bot username for mention detection (e.g. pm-bot, remington)",
+      "required": true
+    },
+    "SLACK_BOT_TOKEN": {
+      "description": "Slack bot token (xoxb-...) for posting messages and reading mentions",
+      "required": true
+    },
+    "SLACK_BOT_USER_ID": {
+      "description": "Slack bot user ID (Uxxx) for self-identification and mention detection",
+      "required": true
+    },
+    "SLACK_CHANNEL_STANDUP": {
+      "description": "Slack channel ID for standup reports and SLA alerts",
+      "required": true
+    },
+    "SLACK_CHANNEL_QA_ALERTS": {
+      "description": "Slack channel ID for QA-specific SLA alerts (falls back to SLACK_CHANNEL_STANDUP if not set)",
+      "required": false
+    },
+    "SLACK_PM_AGENT_LOG_CHANNEL": {
+      "description": "Slack channel ID for internal PM agent logs and errors",
+      "required": false
+    },
+    "BITBUCKET_WORKSPACE": {
+      "description": "Bitbucket workspace slug to monitor for PR mentions",
+      "required": false
+    },
+    "BITBUCKET_REPOS": {
+      "description": "Comma-separated list of Bitbucket repos to monitor (e.g. repo1,repo2)",
+      "required": false
+    },
+    "BUSINESS_TIMEZONE": {
+      "description": "Timezone for business hours calculations",
+      "value": "America/New_York",
+      "required": false
+    },
+    "BUSINESS_HOURS_START": {
+      "description": "Business hours start hour (24h format)",
+      "value": "9",
+      "required": false
+    },
+    "BUSINESS_HOURS_END": {
+      "description": "Business hours end hour (24h format)",
+      "value": "17",
+      "required": false
+    },
+    "SLACK_POLL_INTERVAL": {
+      "description": "Slack polling interval in seconds",
+      "value": "15",
+      "required": false
+    },
+    "DRY_RUN": {
+      "description": "Set to true to log actions without posting to Slack/Jira (for testing)",
+      "value": "false",
+      "required": false
+    },
+    "VERBOSE_LOGGING": {
+      "description": "Enable verbose debug logging",
+      "value": "false",
+      "required": false
+    }
+  },
+  "addons": [
+    {
+      "plan": "heroku-postgresql:essential-0",
+      "as": "DATABASE"
+    }
+  ],
+  "scripts": {
+    "postdeploy": "echo 'Deployment complete. Config vars set. Run: heroku run python run_agent.py sla-check'"
+  }
+}

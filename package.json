@@ -1,0 +1,16 @@
+{
+  "name": "citemed-project-manager",
+  "version": "1.0.0",
+  "description": "CiteMed Project Manager Agent with Claude Code CLI",
+  "private": true,
+  "scripts": {
+    "postinstall": "echo 'Claude Code CLI installed successfully'"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-code": "latest"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}
