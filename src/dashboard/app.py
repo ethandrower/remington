@@ -964,6 +964,159 @@ Return ONLY a JSON array (no markdown, no explanation):
 # SPRINT PULSE
 # ============================================================================
 
+def _fetch_sprint_pulse_data(req, project_key, jira_base, headers, jira_web_url=''):
+    """
+    Inner logic for sprint pulse. Returns a plain dict (not a Flask Response).
+    Called by both get_sprint_pulse() and the agent sprint-report endpoint.
+    """
+    # ── 1. Fetch sprint issues via JQL (paginated) ──────────────────────────
+    all_issues = []
+    next_page_token = None
+    req_fields = [
+        "summary", "status", "priority", "assignee",
+        "timeoriginalestimate", "timespent", "duedate",
+        "customfield_10020",
+    ]
+
+    while True:
+        payload = {
+            "jql": f"project = {project_key} AND sprint in openSprints() AND issuetype not in subTaskIssueTypes() ORDER BY created ASC",
+            "fields": req_fields,
+            "maxResults": 100,
+        }
+        if next_page_token:
+            payload["nextPageToken"] = next_page_token
+
+        r = req.post(
+            f"{jira_base}/rest/api/3/search/jql",
+            headers=headers,
+            json=payload,
+            timeout=30,
+        )
+        if not r.ok:
+            raise RuntimeError(f"JQL search failed: {r.status_code} {r.text[:300]}")
+
+        data = r.json()
+        page = data.get('issues', [])
+        all_issues.extend(page)
+        next_page_token = data.get('nextPageToken')
+        if not next_page_token or not page:
+            break
+
+    if not all_issues:
+        raise LookupError(f"No active sprint found for project {project_key}")
+
+    # ── 2. Extract sprint metadata from customfield_10020 ───────────────────
+    sprint_info = None
+    for issue in all_issues:
+        cf = (issue.get('fields') or {}).get('customfield_10020') or []
+        active = [s for s in cf if isinstance(s, dict) and s.get('state') == 'active']
+        if active:
+            sprint_info = active[0]
+            break
+
+    if not sprint_info:
+        for issue in all_issues:
+            cf = (issue.get('fields') or {}).get('customfield_10020') or []
+            if cf and isinstance(cf[0], dict):
+                sprint_info = cf[0]
+                break
+
+    if not sprint_info:
+        sprint_info = {}
+
+    sprint = {
+        'id':         sprint_info.get('id', ''),
+        'name':       sprint_info.get('name', 'Active Sprint'),
+        'start_date': (sprint_info.get('startDate') or '')[:10] or None,
+        'end_date':   (sprint_info.get('endDate') or '')[:10] or None,
+        'state':      sprint_info.get('state', 'active'),
+        'board_name': f"{project_key} Board",
+    }
+
+    # ── 3. Discover project statuses and build weight map ───────────────────
+    status_weights = {}
+    r = req.get(
+        f"{jira_base}/rest/api/3/project/{project_key}/statuses",
+        headers=headers,
+        timeout=15,
+    )
+    if r.ok:
+        seen = {}
+        for issue_type_data in r.json():
+            for s in issue_type_data.get('statuses', []):
+                name = s.get('name', '')
+                cat_key = (s.get('statusCategory') or {}).get('key', 'indeterminate')
+                seen[name] = cat_key
+
+        def _weight(name, cat_key):
+            nl = name.lower()
+            if cat_key == 'done':
+                return 1.0
+            if 'pending approval' in nl:
+                return 0.92
+            if 'changes' in nl or 'rework' in nl:
+                return 0.88
+            if 'qa' in nl or ('test' in nl and 'ready' not in nl):
+                return 0.85
+            if 'review' in nl and 'ready' not in nl:
+                return 0.75
+            if 'progress' in nl and 'ready' not in nl:
+                return 0.35
+            if 'blocked' in nl or 'impediment' in nl:
+                return 0.02
+            if cat_key == 'indeterminate':
+                return 0.20
+            return 0.05
+
+        for name, cat_key in seen.items():
+            status_weights[name] = _weight(name, cat_key)
+
+    for issue in all_issues:
+        s_obj = (issue.get('fields') or {}).get('status') or {}
+        name = s_obj.get('name', '')
+        if name and name not in status_weights:
+            cat_key = (s_obj.get('statusCategory') or {}).get('key', 'indeterminate')
+            status_weights[name] = _weight(name, cat_key)
+
+    # ── 4. Group by developer ────────────────────────────────────────────────
+    devs: dict = {}
+    for issue in all_issues:
+        f = issue.get('fields') or {}
+        assignee = f.get('assignee') or {}
+        account_id = assignee.get('accountId') or 'unassigned'
+        display_name = assignee.get('displayName') or 'Unassigned'
+
+        if account_id not in devs:
+            devs[account_id] = {'account_id': account_id, 'name': display_name, 'tickets': []}
+
+        status_obj = f.get('status') or {}
+        priority_obj = f.get('priority') or {}
+        est_sec = f.get('timeoriginalestimate') or 0
+        spent_sec = f.get('timespent') or 0
+
+        devs[account_id]['tickets'].append({
+            'key':            issue.get('key', ''),
+            'summary':        f.get('summary', ''),
+            'status':         status_obj.get('name', 'Unknown'),
+            'priority':       (priority_obj.get('name') or 'Medium'),
+            'estimate_hours': round(est_sec / 3600, 2) if est_sec else 0,
+            'logged_hours':   round(spent_sec / 3600, 2) if spent_sec else 0,
+            'due_date':       f.get('duedate'),
+        })
+
+    dev_list = sorted(devs.values(), key=lambda d: d['name'])
+
+    return {
+        'sprint':         sprint,
+        'developers':     dev_list,
+        'status_weights': status_weights,
+        'project_key':    project_key,
+        'jira_url':       jira_web_url or '',
+        'last_updated':   datetime.utcnow().isoformat() + 'Z',
+    }
+
+
 @app.route('/api/sprint-pulse')
 def get_sprint_pulse():
     """
@@ -984,157 +1137,13 @@ def get_sprint_pulse():
 
         jira_base = f"https://api.atlassian.com/ex/jira/{ATLASSIAN_CLOUD_ID}"
         headers = get_jira_auth_headers()
+        jira_web_url = JIRA_WEB_URL or os.getenv('JIRA_INSTANCE_URL', '').rstrip('/')
 
-        # ── 1. Fetch sprint issues via JQL (paginated via nextPageToken) ───
-        # customfield_10020 = sprint field (list of sprints on the issue)
-        all_issues = []
-        next_page_token = None
-        req_fields = [
-            "summary", "status", "priority", "assignee",
-            "timeoriginalestimate", "timespent", "duedate",
-            "customfield_10020",
-        ]
+        result = _fetch_sprint_pulse_data(req, project_key, jira_base, headers, jira_web_url)
+        return jsonify(result)
 
-        while True:
-            payload = {
-                "jql": f"project = {project_key} AND sprint in openSprints() AND issuetype not in subTaskIssueTypes() ORDER BY created ASC",
-                "fields": req_fields,
-                "maxResults": 100,
-            }
-            if next_page_token:
-                payload["nextPageToken"] = next_page_token
-
-            r = req.post(
-                f"{jira_base}/rest/api/3/search/jql",
-                headers=headers,
-                json=payload,
-                timeout=30,
-            )
-            if not r.ok:
-                return jsonify({"error": f"JQL search failed: {r.status_code} {r.text[:300]}"}), 500
-
-            data = r.json()
-            page = data.get('issues', [])
-            all_issues.extend(page)
-            next_page_token = data.get('nextPageToken')
-            if not next_page_token or not page:
-                break
-
-        if not all_issues:
-            return jsonify({"error": f"No active sprint found for project {project_key}"}), 404
-
-        # ── 2. Extract sprint metadata from first issue's sprint field ─────
-        sprint_info = None
-        for issue in all_issues:
-            cf = (issue.get('fields') or {}).get('customfield_10020') or []
-            active = [s for s in cf if isinstance(s, dict) and s.get('state') == 'active']
-            if active:
-                sprint_info = active[0]
-                break
-
-        if not sprint_info:
-            # Fall back to any sprint on the issues
-            for issue in all_issues:
-                cf = (issue.get('fields') or {}).get('customfield_10020') or []
-                if cf and isinstance(cf[0], dict):
-                    sprint_info = cf[0]
-                    break
-
-        if not sprint_info:
-            sprint_info = {}
-
-        sprint = {
-            'id':         sprint_info.get('id', ''),
-            'name':       sprint_info.get('name', 'Active Sprint'),
-            'start_date': (sprint_info.get('startDate') or '')[:10] or None,
-            'end_date':   (sprint_info.get('endDate') or '')[:10] or None,
-            'state':      sprint_info.get('state', 'active'),
-            'board_name': f"{project_key} Board",
-        }
-
-        # ── 4. Discover project statuses and build weight map ──────────────
-        status_weights = {}
-        r = req.get(
-            f"{jira_base}/rest/api/3/project/{project_key}/statuses",
-            headers=headers,
-            timeout=15,
-        )
-        if r.ok:
-            seen = {}
-            for issue_type_data in r.json():
-                for s in issue_type_data.get('statuses', []):
-                    name = s.get('name', '')
-                    cat_key = (s.get('statusCategory') or {}).get('key', 'indeterminate')
-                    seen[name] = cat_key
-
-            def _weight(name, cat_key):
-                nl = name.lower()
-                if cat_key == 'done':
-                    return 1.0
-                if 'pending approval' in nl:
-                    return 0.92
-                if 'changes' in nl or 'rework' in nl:
-                    return 0.88
-                if 'qa' in nl or ('test' in nl and 'ready' not in nl):
-                    return 0.85
-                if 'review' in nl and 'ready' not in nl:
-                    return 0.75
-                if 'progress' in nl and 'ready' not in nl:
-                    return 0.35
-                if 'blocked' in nl or 'impediment' in nl:
-                    return 0.02
-                if cat_key == 'indeterminate':
-                    return 0.20
-                return 0.05  # To Do / new
-
-            for name, cat_key in seen.items():
-                status_weights[name] = _weight(name, cat_key)
-
-        # Also add any statuses seen in issues but not in project statuses
-        for issue in all_issues:
-            s_obj = (issue.get('fields') or {}).get('status') or {}
-            name = s_obj.get('name', '')
-            if name and name not in status_weights:
-                cat_key = (s_obj.get('statusCategory') or {}).get('key', 'indeterminate')
-                status_weights[name] = _weight(name, cat_key)
-
-        # ── 5. Group by developer ──────────────────────────────────────────
-        devs: dict = {}
-        for issue in all_issues:
-            f = issue.get('fields') or {}
-            assignee = f.get('assignee') or {}
-            account_id = assignee.get('accountId') or 'unassigned'
-            display_name = assignee.get('displayName') or 'Unassigned'
-
-            if account_id not in devs:
-                devs[account_id] = {'account_id': account_id, 'name': display_name, 'tickets': []}
-
-            status_obj = f.get('status') or {}
-            priority_obj = f.get('priority') or {}
-            est_sec = f.get('timeoriginalestimate') or 0
-            spent_sec = f.get('timespent') or 0
-
-            devs[account_id]['tickets'].append({
-                'key':           issue.get('key', ''),
-                'summary':       f.get('summary', ''),
-                'status':        status_obj.get('name', 'Unknown'),
-                'priority':      (priority_obj.get('name') or 'Medium'),
-                'estimate_hours': round(est_sec / 3600, 2) if est_sec else 0,
-                'logged_hours':   round(spent_sec / 3600, 2) if spent_sec else 0,
-                'due_date':      f.get('duedate'),  # YYYY-MM-DD or None
-            })
-
-        dev_list = sorted(devs.values(), key=lambda d: d['name'])
-
-        return jsonify({
-            'sprint':         sprint,
-            'developers':     dev_list,
-            'status_weights': status_weights,
-            'project_key':    project_key,
-            'jira_url':       JIRA_WEB_URL or os.getenv('JIRA_INSTANCE_URL', '').rstrip('/'),
-            'last_updated':   datetime.utcnow().isoformat() + 'Z',
-        })
-
+    except LookupError as e:
+        return jsonify({"error": str(e)}), 404
     except Exception as e:
         import traceback
         return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
@@ -1165,229 +1174,239 @@ def get_sprint_burndown():
         jira_base = f"https://api.atlassian.com/ex/jira/{ATLASSIAN_CLOUD_ID}"
         headers = get_jira_auth_headers()
 
-        # ── 1. Fetch sprint issues (same JQL as sprint-pulse) ─────────────────
-        all_issues, next_page_token = [], None
-        req_fields = ["summary", "status", "timeoriginalestimate", "customfield_10020"]
-        while True:
-            payload = {
-                "jql": f"project = {project_key} AND sprint in openSprints() AND issuetype not in subTaskIssueTypes() ORDER BY created ASC",
-                "fields": req_fields, "maxResults": 100,
-            }
-            if next_page_token:
-                payload["nextPageToken"] = next_page_token
-            r = req.post(f"{jira_base}/rest/api/3/search/jql", headers=headers, json=payload, timeout=30)
-            if not r.ok:
-                return jsonify({"error": f"JQL search failed: {r.status_code}"}), 500
-            data = r.json()
-            page = data.get('issues', [])
-            all_issues.extend(page)
-            next_page_token = data.get('nextPageToken')
-            if not next_page_token or not page:
-                break
+        result = _fetch_sprint_burndown_data(req, project_key, jira_base, headers)
+        return jsonify(result)
 
-        if not all_issues:
-            return jsonify({"error": "No active sprint issues found"}), 404
-
-        # ── 2. Extract sprint dates from customfield_10020 ────────────────────
-        sprint_info = next(
-            (s for i in all_issues
-             for s in ((i.get('fields') or {}).get('customfield_10020') or [])
-             if isinstance(s, dict) and s.get('state') == 'active'),
-            None
-        )
-        if not sprint_info:
-            return jsonify({"error": "No active sprint metadata found"}), 404
-
-        sprint_start = sprint_info.get('startDate', '')[:10]
-        sprint_end   = sprint_info.get('endDate',   '')[:10]
-        sprint_start_dt = datetime.strptime(sprint_start, '%Y-%m-%d').date()
-        sprint_end_dt   = datetime.strptime(sprint_end,   '%Y-%m-%d').date()
-        today = datetime.utcnow().date()
-        sprint_id   = sprint_info.get('id')
-        sprint_name = sprint_info.get('name', '')
-
-        # ── 3. Business-day range from sprint start → today ───────────────────
-        def biz_days_range(start, end):
-            days, cur = [], start
-            while cur <= end:
-                if cur.weekday() < 5:
-                    days.append(cur)
-                cur += timedelta(days=1)
-            return days
-
-        biz_days      = biz_days_range(sprint_start_dt, min(today, sprint_end_dt))
-        total_biz_days = len(biz_days_range(sprint_start_dt, sprint_end_dt))
-
-        # ── 4. Total sprint hours ─────────────────────────────────────────────
-        def est_hours(issue):
-            sec = (issue.get('fields') or {}).get('timeoriginalestimate') or 0
-            return sec / 3600 if sec else 4  # 4h default
-
-        total_hours = sum(est_hours(i) for i in all_issues)
-
-        # ── 5. Fetch changelogs in parallel ───────────────────────────────────
-        def fetch_cl(key):
-            try:
-                r2 = req.get(
-                    f"{jira_base}/rest/api/3/issue/{key}/changelog",
-                    headers=headers, params={"maxResults": 200}, timeout=15
-                )
-                return key, r2.json().get('values', []) if r2.ok else []
-            except Exception:
-                return key, []
-
-        changelogs = {}
-        with ThreadPoolExecutor(max_workers=8) as ex:
-            futs = {ex.submit(fetch_cl, i['key']): i['key'] for i in all_issues}
-            for fut in as_completed(futs, timeout=50):
-                try:
-                    key, entries = fut.result()
-                    changelogs[key] = entries
-                except Exception:
-                    pass
-
-        # ── 5b. Detect scope creep ────────────────────────────────────────────
-        import re as _re
-        _offset_re = _re.compile(r'([+-])(\d{2})(\d{2})$')
-
-        def _parse_jira_dt(s):
-            """Parse Jira timestamp; normalizes +HHMM → +HH:MM for Python 3.9."""
-            s = s.replace('Z', '+00:00')
-            s = _offset_re.sub(r'\1\2:\3', s)
-            return datetime.fromisoformat(s).replace(tzinfo=None)
-
-        sprint_start_dt_end = datetime.combine(sprint_start_dt, datetime.max.time())
-        scope_additions = []   # [{key, hours, added_date}]
-        sprint_join_dt  = {}   # key -> datetime joined mid-sprint (None = in from start)
-
-        for issue in all_issues:
-            key   = issue['key']
-            hours = est_hours(issue)
-            join_dt = None
-            for entry in changelogs.get(key, []):
-                ts_str = entry.get('created', '')
-                for item in entry.get('items', []):
-                    field = (item.get('field') or '').lower()
-                    if field not in ('sprint', 'customfield_10020'):
-                        continue
-                    to_str = item.get('toString') or ''
-                    id_match   = sprint_id and (
-                        f'id={sprint_id},' in to_str or f'id={sprint_id}]' in to_str
-                    )
-                    name_match = sprint_name and sprint_name in to_str
-                    if not (id_match or name_match):
-                        continue
-                    try:
-                        dt = _parse_jira_dt(ts_str)
-                    except Exception:
-                        continue
-                    if dt > sprint_start_dt_end:
-                        if join_dt is None or dt < join_dt:
-                            join_dt = dt
-            sprint_join_dt[key] = join_dt
-            if join_dt is not None:
-                scope_additions.append({
-                    'key': key,
-                    'hours': round(hours, 1),
-                    'added_date': join_dt.date().isoformat(),
-                })
-
-        added_hours   = round(sum(a['hours'] for a in scope_additions), 1)
-        initial_hours = round(total_hours - added_hours, 1)
-
-        # ── 6. Status → bucket mapping ────────────────────────────────────────
-        def status_bucket(name):
-            nl = (name or '').lower()
-            if any(w in nl for w in ('complete', 'done', 'closed', 'shipped')):
-                return 'complete'
-            if 'block' in nl or 'impediment' in nl:
-                return 'blocked'
-            if 'qa' in nl or ('test' in nl and 'ready' not in nl):
-                return 'verifying'
-            if 'review' in nl and 'ready' not in nl:
-                return 'verifying'
-            if 'progress' in nl or 'changes' in nl or 'rework' in nl:
-                return 'active'
-            return 'queued'
-
-        # ── 7. Status at end of a given day via changelog replay ──────────────
-        def status_at_day(issue_key, day_date, current_status):
-            day_end = datetime.combine(day_date, datetime.max.time())
-            events = []
-            for entry in changelogs.get(issue_key, []):
-                created_str = entry.get('created', '')
-                for item in entry.get('items', []):
-                    if item.get('field') == 'status':
-                        try:
-                            dt = _parse_jira_dt(created_str)
-                            events.append((dt, item.get('fromString', ''), item.get('toString', '')))
-                        except Exception:
-                            pass
-            events.sort(key=lambda e: e[0])
-            status = events[0][1] if events else current_status
-            for event_dt, _, to_s in events:
-                if event_dt <= day_end:
-                    status = to_s
-                else:
-                    break
-            return status
-
-        # ── 8. Scope-by-day (step function: cumulative scope visible each day) ──
-        scope_by_day = []
-        for day in biz_days:
-            day_scope = sum(
-                est_hours(i) for i in all_issues
-                if sprint_join_dt.get(i['key']) is None
-                or sprint_join_dt[i['key']].date() <= day
-            )
-            scope_by_day.append(round(day_scope, 1))
-
-        # ── 9. Reconstruct daily snapshots ────────────────────────────────────
-        daily_snapshots = []
-        for day_idx, day in enumerate(biz_days):
-            buckets = {'complete': 0, 'verifying': 0, 'active': 0, 'queued': 0, 'blocked': 0}
-            for issue in all_issues:
-                cur_status = (issue.get('fields') or {}).get('status', {}).get('name', 'Ready For Development')
-                s = status_at_day(issue['key'], day, cur_status)
-                buckets[status_bucket(s)] += est_hours(issue)
-
-            remaining = buckets['verifying'] + buckets['active'] + buckets['queued'] + buckets['blocked']
-            ideal = initial_hours * max(0, 1 - (day_idx + 1) / total_biz_days)
-            daily_snapshots.append({
-                'date':      day.isoformat(),
-                'complete':  round(buckets['complete'],  1),
-                'verifying': round(buckets['verifying'], 1),
-                'active':    round(buckets['active'],    1),
-                'queued':    round(buckets['queued'],    1),
-                'blocked':   round(buckets['blocked'],   1),
-                'remaining': round(remaining,            1),
-                'ideal':     round(ideal,                1),
-                'scope':     scope_by_day[day_idx],
-            })
-
-        today_snap = daily_snapshots[-1] if daily_snapshots else {}
-        complete_h = today_snap.get('complete', 0)
-        blocked_h  = today_snap.get('blocked',  0)
-        remaining  = today_snap.get('remaining', 0)
-        ideal_now  = today_snap.get('ideal',    0)
-
-        return jsonify({
-            'sprint':          {'name': sprint_info.get('name', ''), 'start_date': sprint_start, 'end_date': sprint_end},
-            'daily_snapshots': daily_snapshots,
-            'total_hours':     round(total_hours, 1),
-            'initial_hours':   initial_hours,
-            'added_hours':     added_hours,
-            'added_tickets':   len(scope_additions),
-            'scope_additions': scope_additions,
-            'behind_hours':    round(remaining - ideal_now, 1),
-            'blocked_hours':   round(blocked_h,  1),
-            'complete_hours':  round(complete_h, 1),
-            'complete_pct':    round(complete_h / total_hours * 100, 1) if total_hours else 0,
-        })
-
+    except LookupError as e:
+        return jsonify({"error": str(e)}), 404
     except Exception as e:
         import traceback
         return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
+
+
+def _fetch_sprint_burndown_data(req, project_key, jira_base, headers):
+    """
+    Inner logic for sprint burndown. Returns a plain dict (not a Flask Response).
+    Called by both get_sprint_burndown() and the agent sprint-report endpoint.
+    """
+    import re as _re
+    from datetime import datetime, timedelta
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    # ── 1. Fetch sprint issues ────────────────────────────────────────────────
+    all_issues, next_page_token = [], None
+    req_fields = ["summary", "status", "timeoriginalestimate", "customfield_10020"]
+    while True:
+        payload = {
+            "jql": f"project = {project_key} AND sprint in openSprints() AND issuetype not in subTaskIssueTypes() ORDER BY created ASC",
+            "fields": req_fields, "maxResults": 100,
+        }
+        if next_page_token:
+            payload["nextPageToken"] = next_page_token
+        r = req.post(f"{jira_base}/rest/api/3/search/jql", headers=headers, json=payload, timeout=30)
+        if not r.ok:
+            raise RuntimeError(f"JQL search failed: {r.status_code}")
+        data = r.json()
+        page = data.get('issues', [])
+        all_issues.extend(page)
+        next_page_token = data.get('nextPageToken')
+        if not next_page_token or not page:
+            break
+
+    if not all_issues:
+        raise LookupError("No active sprint issues found")
+
+    # ── 2. Extract sprint dates ───────────────────────────────────────────────
+    sprint_info = next(
+        (s for i in all_issues
+         for s in ((i.get('fields') or {}).get('customfield_10020') or [])
+         if isinstance(s, dict) and s.get('state') == 'active'),
+        None
+    )
+    if not sprint_info:
+        raise LookupError("No active sprint metadata found")
+
+    sprint_start = sprint_info.get('startDate', '')[:10]
+    sprint_end   = sprint_info.get('endDate',   '')[:10]
+    sprint_start_dt = datetime.strptime(sprint_start, '%Y-%m-%d').date()
+    sprint_end_dt   = datetime.strptime(sprint_end,   '%Y-%m-%d').date()
+    today       = datetime.utcnow().date()
+    sprint_id   = sprint_info.get('id')
+    sprint_name = sprint_info.get('name', '')
+
+    # ── 3. Business-day range ─────────────────────────────────────────────────
+    def biz_days_range(start, end):
+        days, cur = [], start
+        while cur <= end:
+            if cur.weekday() < 5:
+                days.append(cur)
+            cur += timedelta(days=1)
+        return days
+
+    biz_days_list  = biz_days_range(sprint_start_dt, min(today, sprint_end_dt))
+    total_biz_days = len(biz_days_range(sprint_start_dt, sprint_end_dt))
+
+    def est_hours(issue):
+        sec = (issue.get('fields') or {}).get('timeoriginalestimate') or 0
+        return sec / 3600 if sec else 4
+
+    total_hours = sum(est_hours(i) for i in all_issues)
+
+    # ── 4. Fetch changelogs in parallel ───────────────────────────────────────
+    def fetch_cl(key):
+        try:
+            r2 = req.get(
+                f"{jira_base}/rest/api/3/issue/{key}/changelog",
+                headers=headers, params={"maxResults": 200}, timeout=15
+            )
+            return key, r2.json().get('values', []) if r2.ok else []
+        except Exception:
+            return key, []
+
+    changelogs = {}
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        futs = {ex.submit(fetch_cl, i['key']): i['key'] for i in all_issues}
+        for fut in as_completed(futs, timeout=50):
+            try:
+                key, entries = fut.result()
+                changelogs[key] = entries
+            except Exception:
+                pass
+
+    # ── 5. Detect scope creep ─────────────────────────────────────────────────
+    _offset_re = _re.compile(r'([+-])(\d{2})(\d{2})$')
+
+    def _parse_jira_dt(s):
+        s = s.replace('Z', '+00:00')
+        s = _offset_re.sub(r'\1\2:\3', s)
+        return datetime.fromisoformat(s).replace(tzinfo=None)
+
+    sprint_start_dt_end = datetime.combine(sprint_start_dt, datetime.max.time())
+    scope_additions = []
+    sprint_join_dt  = {}
+
+    for issue in all_issues:
+        key   = issue['key']
+        hours = est_hours(issue)
+        join_dt = None
+        for entry in changelogs.get(key, []):
+            ts_str = entry.get('created', '')
+            for item in entry.get('items', []):
+                field = (item.get('field') or '').lower()
+                if field not in ('sprint', 'customfield_10020'):
+                    continue
+                to_str = item.get('toString') or ''
+                id_match   = sprint_id and (
+                    f'id={sprint_id},' in to_str or f'id={sprint_id}]' in to_str
+                )
+                name_match = sprint_name and sprint_name in to_str
+                if not (id_match or name_match):
+                    continue
+                try:
+                    dt = _parse_jira_dt(ts_str)
+                except Exception:
+                    continue
+                if dt > sprint_start_dt_end:
+                    if join_dt is None or dt < join_dt:
+                        join_dt = dt
+        sprint_join_dt[key] = join_dt
+        if join_dt is not None:
+            scope_additions.append({
+                'key': key,
+                'hours': round(hours, 1),
+                'added_date': join_dt.date().isoformat(),
+            })
+
+    added_hours   = round(sum(a['hours'] for a in scope_additions), 1)
+    initial_hours = round(total_hours - added_hours, 1)
+
+    # ── 6. Status → bucket ────────────────────────────────────────────────────
+    def status_bucket(name):
+        nl = (name or '').lower()
+        if any(w in nl for w in ('complete', 'done', 'closed', 'shipped')):
+            return 'complete'
+        if 'block' in nl or 'impediment' in nl:
+            return 'blocked'
+        if 'qa' in nl or ('test' in nl and 'ready' not in nl):
+            return 'verifying'
+        if 'review' in nl and 'ready' not in nl:
+            return 'verifying'
+        if 'progress' in nl or 'changes' in nl or 'rework' in nl:
+            return 'active'
+        return 'queued'
+
+    def status_at_day(issue_key, day_date, current_status):
+        day_end = datetime.combine(day_date, datetime.max.time())
+        events = []
+        for entry in changelogs.get(issue_key, []):
+            created_str = entry.get('created', '')
+            for item in entry.get('items', []):
+                if item.get('field') == 'status':
+                    try:
+                        dt = _parse_jira_dt(created_str)
+                        events.append((dt, item.get('fromString', ''), item.get('toString', '')))
+                    except Exception:
+                        pass
+        events.sort(key=lambda e: e[0])
+        status = events[0][1] if events else current_status
+        for event_dt, _, to_s in events:
+            if event_dt <= day_end:
+                status = to_s
+            else:
+                break
+        return status
+
+    # ── 7. Daily snapshots ────────────────────────────────────────────────────
+    scope_by_day = []
+    for day in biz_days_list:
+        day_scope = sum(
+            est_hours(i) for i in all_issues
+            if sprint_join_dt.get(i['key']) is None
+            or sprint_join_dt[i['key']].date() <= day
+        )
+        scope_by_day.append(round(day_scope, 1))
+
+    daily_snapshots = []
+    for day_idx, day in enumerate(biz_days_list):
+        buckets = {'complete': 0, 'verifying': 0, 'active': 0, 'queued': 0, 'blocked': 0}
+        for issue in all_issues:
+            cur_status = (issue.get('fields') or {}).get('status', {}).get('name', 'Ready For Development')
+            s = status_at_day(issue['key'], day, cur_status)
+            buckets[status_bucket(s)] += est_hours(issue)
+
+        remaining = buckets['verifying'] + buckets['active'] + buckets['queued'] + buckets['blocked']
+        ideal = initial_hours * max(0, 1 - (day_idx + 1) / total_biz_days)
+        daily_snapshots.append({
+            'date':      day.isoformat(),
+            'complete':  round(buckets['complete'],  1),
+            'verifying': round(buckets['verifying'], 1),
+            'active':    round(buckets['active'],    1),
+            'queued':    round(buckets['queued'],    1),
+            'blocked':   round(buckets['blocked'],   1),
+            'remaining': round(remaining,            1),
+            'ideal':     round(ideal,                1),
+            'scope':     scope_by_day[day_idx],
+        })
+
+    today_snap = daily_snapshots[-1] if daily_snapshots else {}
+    complete_h = today_snap.get('complete', 0)
+    blocked_h  = today_snap.get('blocked',  0)
+    remaining  = today_snap.get('remaining', 0)
+    ideal_now  = today_snap.get('ideal',    0)
+
+    return {
+        'sprint':          {'name': sprint_info.get('name', ''), 'start_date': sprint_start, 'end_date': sprint_end},
+        'daily_snapshots': daily_snapshots,
+        'total_hours':     round(total_hours, 1),
+        'initial_hours':   initial_hours,
+        'added_hours':     added_hours,
+        'added_tickets':   len(scope_additions),
+        'scope_additions': scope_additions,
+        'behind_hours':    round(remaining - ideal_now, 1),
+        'blocked_hours':   round(blocked_h,  1),
+        'complete_hours':  round(complete_h, 1),
+        'complete_pct':    round(complete_h / total_hours * 100, 1) if total_hours else 0,
+    }
 
 
 # ============================================================================
@@ -1931,6 +1950,276 @@ def save_channel_settings():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ============================================================================
+# AGENT SPRINT REPORT
+# ============================================================================
+
+@app.route('/api/agent/sprint-report')
+def get_agent_sprint_report():
+    """
+    Comprehensive, fully-computed sprint report for AI agents.
+
+    Fetches sprint-pulse and burndown data from Jira, applies all Vue.js
+    computed property math server-side, and returns a single agent-ready JSON
+    with health score, grade, status distribution, developer velocity
+    classification, per-ticket risk projections, action items, and (if a
+    next sprint exists) capacity planning summary.
+
+    Query params:
+      ?include_burndown=0   Skip changelog replay (faster, ~2s vs ~30s).
+                            Burndown fields will be null/zero.
+      ?include_planning=0   Skip next-sprint capacity fetch (default: 1).
+    """
+    try:
+        import requests as req
+        from src.tools.base import get_jira_auth_headers, ATLASSIAN_CLOUD_ID, JIRA_WEB_URL
+        from src.dashboard.sprint_report import build_report
+        from concurrent.futures import ThreadPoolExecutor, as_completed as _as_completed
+
+        project_key = os.getenv('ATLASSIAN_PROJECT_KEY', '').split(',')[0].strip()
+        if not project_key:
+            return jsonify({"error": "ATLASSIAN_PROJECT_KEY not configured"}), 400
+
+        include_burndown = request.args.get('include_burndown', '1') != '0'
+        include_planning = request.args.get('include_planning', '1') != '0'
+
+        jira_base    = f"https://api.atlassian.com/ex/jira/{ATLASSIAN_CLOUD_ID}"
+        headers      = get_jira_auth_headers()
+        jira_web_url = JIRA_WEB_URL or os.getenv('JIRA_INSTANCE_URL', '').rstrip('/')
+
+        # ── Fetch pulse + burndown in parallel ────────────────────────────────
+        pulse_data    = None
+        burndown_data = {}
+        fetch_errors  = {}
+
+        def _do_pulse():
+            return _fetch_sprint_pulse_data(req, project_key, jira_base, headers, jira_web_url)
+
+        def _do_burndown():
+            return _fetch_sprint_burndown_data(req, project_key, jira_base, headers)
+
+        futures = {}
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            futures['pulse'] = ex.submit(_do_pulse)
+            if include_burndown:
+                futures['burndown'] = ex.submit(_do_burndown)
+
+            pulse_not_found = False
+            for name, fut in futures.items():
+                try:
+                    result = fut.result(timeout=90)
+                    if name == 'pulse':
+                        pulse_data = result
+                    elif name == 'burndown':
+                        burndown_data = result
+                except LookupError as exc:
+                    fetch_errors[name] = str(exc)
+                    if name == 'pulse':
+                        pulse_not_found = True
+                except Exception as exc:
+                    fetch_errors[name] = str(exc)
+
+        if pulse_data is None:
+            err = fetch_errors.get('pulse', 'Unknown error fetching sprint data')
+            return jsonify({"error": err}), (404 if pulse_not_found else 500)
+
+        # ── Optionally fetch next-sprint planning data ─────────────────────────
+        planning_data = None
+        if include_planning:
+            try:
+                # Find first future sprint
+                r_future = req.post(
+                    f"{jira_base}/rest/api/3/search/jql",
+                    headers=headers,
+                    json={
+                        "jql": f"project = {project_key} AND sprint in futureSprints() ORDER BY created ASC",
+                        "fields": ["customfield_10020"],
+                        "maxResults": 50,
+                    },
+                    timeout=20,
+                )
+                if r_future.ok:
+                    seen_ids = set()
+                    next_sprint_id = None
+                    for issue in r_future.json().get('issues', []):
+                        cf = (issue.get('fields') or {}).get('customfield_10020') or []
+                        for s in cf:
+                            if isinstance(s, dict) and s.get('state') == 'future':
+                                sid = s.get('id')
+                                if sid and sid not in seen_ids:
+                                    seen_ids.add(sid)
+                                    if next_sprint_id is None:
+                                        next_sprint_id = sid
+                    if next_sprint_id:
+                        from flask import url_for
+                        # Re-use existing get_sprint_planning logic by calling the helper directly
+                        # Build a minimal request context substitute
+                        class _FakeRequest:
+                            args = {'sprint_id': str(next_sprint_id), 'rollover': '1'}
+                        # Monkey-patch request.args temporarily isn't safe; call internals directly
+                        # Instead, re-invoke via internal function call with the sprint ID
+                        team_rows = db.get_team_members(active_only=True)
+                        PLANNING_ROLES = {'dev', 'wa', 'tech_lead'}
+                        team_by_jira_id = {}
+                        for m in team_rows:
+                            jid = m.get('jira_account_id')
+                            role = (m.get('role') or '').lower()
+                            if jid and role in PLANNING_ROLES:
+                                team_by_jira_id[jid] = {
+                                    'id': m['id'],
+                                    'display_name': m['display_name'],
+                                    'role': role,
+                                    'weekly_capacity_hours': float(m.get('weekly_capacity_hours') or 40.0),
+                                    'jira_account_id': jid,
+                                }
+
+                        from datetime import timedelta as _td
+                        sprint_id_str = str(next_sprint_id)
+                        req_fields_p = ["summary", "status", "assignee",
+                                        "timeoriginalestimate", "duedate", "customfield_10020"]
+                        plan_issues, next_tok = [], None
+                        sprint_info_p = None
+                        while True:
+                            payload_p = {
+                                "jql": f"project = {project_key} AND sprint = {sprint_id_str} ORDER BY created ASC",
+                                "fields": req_fields_p, "maxResults": 100,
+                            }
+                            if next_tok:
+                                payload_p["nextPageToken"] = next_tok
+                            rp = req.post(f"{jira_base}/rest/api/3/search/jql",
+                                          headers=headers, json=payload_p, timeout=30)
+                            if not rp.ok:
+                                break
+                            dp = rp.json()
+                            plan_issues.extend(dp.get('issues', []))
+                            next_tok = dp.get('nextPageToken')
+                            if not next_tok or not dp.get('issues'):
+                                break
+
+                        for issue in plan_issues:
+                            cf = (issue.get('fields') or {}).get('customfield_10020') or []
+                            for s in cf:
+                                if isinstance(s, dict) and str(s.get('id', '')) == sprint_id_str:
+                                    sprint_info_p = s
+                                    break
+                            if sprint_info_p:
+                                break
+
+                        sprint_info_p = sprint_info_p or {}
+                        start_p = (sprint_info_p.get('startDate') or '')[:10]
+                        end_p   = (sprint_info_p.get('endDate') or '')[:10]
+
+                        sprint_weeks_p = 2.0
+                        if start_p and end_p:
+                            try:
+                                from datetime import datetime as _dt
+                                sd_p = _dt.strptime(start_p, '%Y-%m-%d').date()
+                                ed_p = _dt.strptime(end_p,   '%Y-%m-%d').date()
+                                sprint_weeks_p = max(1.0, round((ed_p - sd_p).days / 7, 1))
+                            except Exception:
+                                pass
+
+                        def _est_h(issue):
+                            sec = (issue.get('fields') or {}).get('timeoriginalestimate') or 0
+                            return round(sec / 3600, 1)
+
+                        plan_devs: dict = {}
+                        unassigned_tickets_p = []
+                        for issue in plan_issues:
+                            f = issue.get('fields') or {}
+                            assignee = f.get('assignee') or {}
+                            acct_id = assignee.get('accountId')
+                            status_obj = f.get('status') or {}
+                            ticket_p = {
+                                'key':            issue.get('key', ''),
+                                'summary':        f.get('summary', ''),
+                                'status':         status_obj.get('name', 'Unknown'),
+                                'status_cat':     (status_obj.get('statusCategory') or {}).get('key', 'new'),
+                                'estimate_hours': _est_h(issue),
+                                'due_date':       f.get('duedate'),
+                            }
+                            if acct_id and acct_id in team_by_jira_id:
+                                if acct_id not in plan_devs:
+                                    plan_devs[acct_id] = {**team_by_jira_id[acct_id], 'tickets': []}
+                                plan_devs[acct_id]['tickets'].append(ticket_p)
+                            else:
+                                ticket_p['assignee_name'] = assignee.get('displayName', 'Unassigned') if acct_id else 'Unassigned'
+                                unassigned_tickets_p.append(ticket_p)
+
+                        dev_list_p = []
+                        for acct_id, dev in plan_devs.items():
+                            planned_h = sum(t['estimate_hours'] for t in dev['tickets'])
+                            cap_h = dev['weekly_capacity_hours'] * sprint_weeks_p
+                            dev_list_p.append({
+                                'id': dev['id'], 'jira_account_id': acct_id,
+                                'display_name': dev['display_name'], 'role': dev['role'],
+                                'weekly_capacity_hours': dev['weekly_capacity_hours'],
+                                'capacity_hours': round(cap_h, 1),
+                                'planned_hours': round(planned_h, 1),
+                                'rollover_hours': 0.0,
+                                'total_load_hours': round(planned_h, 1),
+                                'tickets': dev['tickets'],
+                                'rollover_tickets': [],
+                            })
+                        for jid, m in team_by_jira_id.items():
+                            if jid not in plan_devs:
+                                cap_h = m['weekly_capacity_hours'] * sprint_weeks_p
+                                dev_list_p.append({
+                                    'id': m['id'], 'jira_account_id': jid,
+                                    'display_name': m['display_name'], 'role': m['role'],
+                                    'weekly_capacity_hours': m['weekly_capacity_hours'],
+                                    'capacity_hours': round(cap_h, 1),
+                                    'planned_hours': 0.0, 'rollover_hours': 0.0,
+                                    'total_load_hours': 0.0, 'tickets': [], 'rollover_tickets': [],
+                                })
+                        dev_list_p.sort(key=lambda d: d['display_name'])
+
+                        planning_data = {
+                            'sprint': {
+                                'id': sprint_id_str,
+                                'name': sprint_info_p.get('name', f'Sprint {sprint_id_str}'),
+                                'start_date': start_p or None,
+                                'end_date':   end_p or None,
+                                'state': 'future',
+                                'weeks': sprint_weeks_p,
+                            },
+                            'developers':         dev_list_p,
+                            'unassigned_tickets': unassigned_tickets_p,
+                            'rollover_enabled':   False,
+                            'rollover_context':   None,
+                            'project_key':        project_key,
+                        }
+            except Exception:
+                pass  # planning failure is non-fatal
+
+        # ── Load team members for velocity classification ──────────────────────
+        team_members = None
+        try:
+            team_members = db.get_team_members(active_only=True)
+        except Exception:
+            pass
+
+        # ── Build and return the computed report ──────────────────────────────
+        report = build_report(
+            pulse_data=pulse_data,
+            burndown_data=burndown_data,
+            planning_data=planning_data,
+            team_members=team_members,
+        )
+
+        # Surface any non-fatal fetch errors so agents know if data is partial
+        if fetch_errors:
+            report['fetch_warnings'] = fetch_errors
+
+        return jsonify(report)
+
+    except LookupError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        import traceback
+        return jsonify({"error": str(e), "trace": traceback.format_exc()}), 500
 
 
 # ============================================================================
