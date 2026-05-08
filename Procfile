@@ -18,7 +18,7 @@
 #            inline because Dokku assigns PORT='' to non-web procs and
 #            int('') crashes (remington#7).
 web: gunicorn "src.dashboard.app:app" --bind 0.0.0.0:$PORT --workers 1 --timeout 120
-worker: PORT=8001 python -u src/pm_agent_service.py
+worker: env PORT=8001 python -u src/pm_agent_service.py
 
 # One-off commands (run with `heroku run <command>`)
 standup: python run_agent.py standup
