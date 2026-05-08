@@ -10,9 +10,11 @@
 #   web:   Flask dashboard — enable with `heroku ps:scale web=1` if needed
 #   clock: Standalone scheduler — redundant, worker handles scheduling internally
 
-worker: python -u src/pm_agent_service.py
-
-web: gunicorn "src.dashboard.app:app" --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+# Dokku deploys: the pm_agent_service IS the web service (uvicorn webhook
+# server). Run it as `web` so Dokku's nginx proxy can route HTTP/HTTPS to it.
+# The legacy `web: gunicorn src.dashboard.app:app` is disabled here — the
+# Flask dashboard has a multi-worker create_all race (see remington#7).
+web: python -u src/pm_agent_service.py
 
 # One-off commands (run with `heroku run <command>`)
 standup: python run_agent.py standup
