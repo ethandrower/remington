@@ -49,7 +49,8 @@ from src.monitors.jira_monitor import JiraMonitor
 from src.monitors.bitbucket_monitor import BitbucketMonitor
 from src.orchestration.claude_code_orchestrator import ClaudeCodeOrchestrator
 from src.utils.slack_logger import get_slack_logger
-from src.agents import run_agent
+from src.agents import run_agent, run_agent_oneshot
+from src.utils.checkpoint_cleanup import cleanup_old_checkpoints
 from src.config import get_jira_base_url
 
 
@@ -399,11 +400,10 @@ class PMAgentService:
                             else:
                                 message_with_context = comment_text
 
-                            response = run_agent(
-                                thread_ts=f"jira-{event['issue_key']}",
-                                channel="jira",
-                                author=event.get('author', 'Unknown'),
+                            response = run_agent_oneshot(
                                 message=message_with_context,
+                                author=event.get('author', 'Unknown'),
+                                channel="jira",
                             )
 
                             # Post response back to Jira
@@ -516,11 +516,10 @@ class PMAgentService:
                             print(f"   ✅ PR context fetched")
                             message_with_context = pr_context + comment_text
 
-                            response = run_agent(
-                                thread_ts=f"bb-{event['repo']}-pr{event['pr_id']}",
-                                channel="bitbucket",
-                                author=event.get('author', 'Unknown'),
+                            response = run_agent_oneshot(
                                 message=message_with_context,
+                                author=event.get('author', 'Unknown'),
+                                channel="bitbucket",
                             )
 
                             # Post response back to Bitbucket PR
@@ -599,11 +598,10 @@ class PMAgentService:
                                     f"numbers where relevant. Post your review as a comment."
                                 )
 
-                                review_response = run_agent(
-                                    thread_ts=f"bb-review-{pr_event['repo']}-pr{pr_event['pr_id']}",
-                                    channel="bitbucket",
-                                    author="system",
+                                review_response = run_agent_oneshot(
                                     message=review_message,
+                                    author="system",
+                                    channel="bitbucket",
                                 )
 
                                 # Post review to Bitbucket
@@ -1042,6 +1040,51 @@ class PMAgentService:
         self.threads.append(thread)
         print(f"✅ Hourly heartbeat started\n")
 
+    def start_checkpoint_cleanup(self):
+        """
+        Prune langgraph_agent checkpoint tables older than the retention window.
+
+        Runs once at startup (catches anything that accumulated while down) and
+        then every 24h. Retention is configurable via CHECKPOINT_RETENTION_DAYS
+        (default 30). One thread total; cheap SQL deletes — no app-level locks.
+        """
+        retention_days = int(os.getenv("CHECKPOINT_RETENTION_DAYS", "30"))
+        interval_seconds = 24 * 60 * 60
+
+        def cleanup_loop():
+            print(f"🧹 Checkpoint cleanup thread started (retention: {retention_days} days)")
+            # Small delay so we don't race the rest of startup logging.
+            time.sleep(60)
+
+            while self.running:
+                try:
+                    deleted = cleanup_old_checkpoints(retention_days=retention_days)
+                    if deleted:
+                        total = sum(deleted.values())
+                        print(
+                            f"🧹 Checkpoint cleanup: pruned {total} rows "
+                            f"({deleted})"
+                        )
+                    else:
+                        print("🧹 Checkpoint cleanup: nothing to prune")
+                except Exception as e:
+                    print(f"❌ Checkpoint cleanup failed: {e}")
+                    import traceback
+                    traceback.print_exc()
+
+                # Sleep in small chunks so shutdown is responsive.
+                for _ in range(interval_seconds // 30):
+                    if not self.running:
+                        break
+                    time.sleep(30)
+
+            print("🛑 Checkpoint cleanup thread stopped")
+
+        thread = threading.Thread(target=cleanup_loop, daemon=True)
+        thread.start()
+        self.threads.append(thread)
+        print(f"✅ Checkpoint cleanup started (every 24h, retention {retention_days} days)\n")
+
     def start_webhook_server(self):
         """Start FastAPI webhook server"""
         # Use Heroku's dynamic PORT or default to 8001 for local dev
@@ -1090,6 +1133,7 @@ class PMAgentService:
         self.start_blocked_ticket_monitoring()  # Blocked ticket analysis (weekdays 10 AM)
         self.start_weekly_timesheet()           # Weekly timesheet report (Mondays 9:30 AM)
         self.start_hourly_heartbeat()           # Heartbeat logging (1 hour)
+        self.start_checkpoint_cleanup()         # Prune old agent checkpoints (24h)
 
         print("="*70)
         print(" Polling Threads Active ".center(70))

@@ -301,6 +301,20 @@ def _build_checkpointer():
 agent_app = _builder.compile(checkpointer=_build_checkpointer())
 
 
+# ─── Oneshot Graph (no persistence) ──────────────────────────────────────────
+#
+# A second compiled graph that does NOT use a checkpointer. State only exists
+# in memory for the duration of a single .invoke() call and is GCed after.
+#
+# Use this for stateless agent calls — PR reviews, Jira/Bitbucket webhook
+# responses, etc. — where each invocation already gets the full context it
+# needs (PR diff + comments fetched fresh) and there is no benefit to keeping
+# a persistent transcript per resource. Persisting these was the root cause
+# of unbounded `langgraph_agent.checkpoint_blobs` growth.
+
+agent_app_oneshot = _builder.compile()
+
+
 # ─── Public Interface ─────────────────────────────────────────────────────────
 
 def run_agent(
@@ -341,3 +355,27 @@ def run_agent(
     # Last message is the final AIMessage (no tool_calls → exited loop)
     final = result["messages"][-1]
     return final.content
+
+
+def run_agent_oneshot(
+    message: str,
+    author: str = "system",
+    channel: str = "oneshot",
+) -> str:
+    """
+    Stateless one-shot agent invocation — no persisted conversation history.
+
+    Identical ReAct loop behavior to run_agent(), but compiled without a
+    checkpointer, so nothing is written to the langgraph_agent.* tables. Use
+    this for fire-and-forget tasks like PR reviews where the caller already
+    provides full context (PR diff, comments) in the message itself.
+    """
+    result = agent_app_oneshot.invoke(
+        {
+            "messages": [HumanMessage(content=f"{author}: {message}")],
+            "channel": channel,
+            "thread_ts": "oneshot",
+            "author": author,
+        }
+    )
+    return result["messages"][-1].content
