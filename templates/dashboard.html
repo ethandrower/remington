@@ -208,6 +208,11 @@
             <a class="sidebar-item" :class="{active: sidebarNav === 'performance'}" @click="navTo('performance')">
                 <i class="bi bi-bar-chart-line"></i> Performance
             </a>
+            <a class="sidebar-item" :class="{active: sidebarNav === 'pm-audit'}" @click="navTo('pm-audit')">
+                <i class="bi bi-person-badge"></i> PM Audit
+                <span v-if="pmAudit.data && pmAudit.data.overall_grade" class="badge rounded-pill sidebar-badge"
+                      :class="{'bg-success': pmAudit.data.overall_grade === 'A', 'bg-primary': pmAudit.data.overall_grade === 'B', 'bg-warning text-dark': pmAudit.data.overall_grade === 'C', 'bg-danger': pmAudit.data.overall_grade === 'D'}">[[ pmAudit.data.overall_grade ]]</span>
+            </a>
 
             <hr class="sidebar-divider">
 
@@ -2250,6 +2255,257 @@
                     </div><!-- /v-else -->
                 </div>
 
+                <!-- ── PM Audit Tab ── -->
+                <div v-if="activeTab === 'pm-audit'" class="tab-pane active">
+                    <!-- Loading -->
+                    <div v-if="pmAudit.loading" class="text-center py-5"><div class="spinner-border text-primary"></div><p class="mt-2 text-muted">Loading PM audit...</p></div>
+                    <!-- Error -->
+                    <div v-else-if="pmAudit.error" class="alert alert-danger">[[ pmAudit.error ]]</div>
+                    <!-- No data -->
+                    <div v-else-if="!pmAudit.data" class="text-center py-5">
+                        <i class="bi bi-person-badge fs-1 d-block mb-2 opacity-25"></i>
+                        <p class="text-muted">No PM audit data yet.</p>
+                        <button class="btn btn-primary" :disabled="pmAudit.computing" @click="runPmAudit()">
+                            <span v-if="pmAudit.computing"><span class="spinner-border spinner-border-sm me-1"></span>Computing...</span>
+                            <span v-else><i class="bi bi-play-fill me-1"></i>Run PM Audit</span>
+                        </button>
+                    </div>
+                    <!-- Data -->
+                    <div v-else>
+                        <!-- Header -->
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div>
+                                <h5 class="mb-1"><i class="bi bi-person-badge me-2"></i>PM Self-Audit</h5>
+                                <span class="text-muted small">[[ pmAudit.data.pm_display_name ]] &middot; [[ pmAudit.data.sprint_name ]] &middot; [[ pmAudit.data.computed_at ? new Date(pmAudit.data.computed_at).toLocaleString() : '' ]]</span>
+                            </div>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge fs-5 px-3 py-2" :class="pmAuditGradeClass(pmAudit.data.overall_grade)">[[ pmAudit.data.overall_grade ]]</span>
+                                <button class="btn btn-outline-primary btn-sm" :disabled="pmAudit.computing" @click="runPmAudit()">
+                                    <span v-if="pmAudit.computing"><span class="spinner-border spinner-border-sm me-1"></span></span>
+                                    <i v-else class="bi bi-arrow-clockwise"></i> Recompute
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- 6 Summary Cards -->
+                        <div class="row g-3 mb-4">
+                            <!-- Approval Velocity -->
+                            <div class="col-md-4 col-lg-2">
+                                <div class="card h-100 border-0 shadow-sm" style="cursor:pointer" @click="pmAuditToggleSection('approval')"
+                                     title="Avg business hours tickets spend in Pending Approval status (from Jira changelog). Backlog = tickets currently in PA. Done = transitions OUT of PA where PM was the actor. Grade: A &lt;8h, B &lt;24h, C &lt;48h, D &gt;48h.">
+                                    <div class="card-body text-center py-3">
+                                        <div class="text-muted small mb-1">Approval</div>
+                                        <div class="fs-4 fw-bold">[[ pmAudit.data.avg_pending_approval_hours != null ? pmAudit.data.avg_pending_approval_hours.toFixed(1) + 'h' : '-' ]]</div>
+                                        <span class="badge" :class="pmAuditGradeClass(pmAudit.data.grades_json?.approval)">[[ pmAudit.data.grades_json?.approval || '-' ]]</span>
+                                        <div class="text-muted" style="font-size:.7rem">backlog: [[ pmAudit.data.pending_approval_backlog ]] &middot; done: [[ pmAudit.data.approvals_completed ]]</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Engagement -->
+                            <div class="col-md-4 col-lg-2">
+                                <div class="card h-100 border-0 shadow-sm" style="cursor:pointer" @click="pmAuditToggleSection('engagement')"
+                                     title="% of sprint tickets where PM left at least one comment. Total PM comments across all tickets. Grade: A &gt;80%, B &gt;60%, C &gt;40%, D &lt;40%.">
+                                    <div class="card-body text-center py-3">
+                                        <div class="text-muted small mb-1">Engagement</div>
+                                        <div class="fs-4 fw-bold">[[ pmAudit.data.engagement_ratio != null ? (pmAudit.data.engagement_ratio * 100).toFixed(0) + '%' : '-' ]]</div>
+                                        <span class="badge" :class="pmAuditGradeClass(pmAudit.data.grades_json?.engagement)">[[ pmAudit.data.grades_json?.engagement || '-' ]]</span>
+                                        <div class="text-muted" style="font-size:.7rem">[[ pmAudit.data.tickets_engaged ]]/[[ pmAudit.data.total_sprint_tickets ]] tickets &middot; [[ pmAudit.data.total_pm_comments ]] comments</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Responsiveness -->
+                            <div class="col-md-4 col-lg-2">
+                                <div class="card h-100 border-0 shadow-sm" style="cursor:pointer" @click="pmAuditToggleSection('responsiveness')"
+                                     title="Avg business hours between a non-PM comment and the next PM reply (on tickets PM previously engaged with). Threads waiting = tickets where the last comment is NOT by PM but PM commented before. Grade: A &lt;4h, B &lt;12h, C &lt;24h, D &gt;24h.">
+                                    <div class="card-body text-center py-3">
+                                        <div class="text-muted small mb-1">Response</div>
+                                        <div class="fs-4 fw-bold">[[ pmAudit.data.avg_pm_response_hours != null ? pmAudit.data.avg_pm_response_hours.toFixed(1) + 'h' : '-' ]]</div>
+                                        <span class="badge" :class="pmAuditGradeClass(pmAudit.data.grades_json?.responsiveness)">[[ pmAudit.data.grades_json?.responsiveness || '-' ]]</span>
+                                        <div class="text-muted" style="font-size:.7rem">[[ pmAudit.data.threads_waiting_on_pm ]] threads waiting</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Grooming -->
+                            <div class="col-md-4 col-lg-2">
+                                <div class="card h-100 border-0 shadow-sm" style="cursor:pointer" @click="pmAuditToggleSection('grooming')"
+                                     title="% of sprint tickets with a time estimate &gt; 0. Created = tickets where PM is the Jira reporter. Unestimated = tickets missing originalEstimate (PM responsibility to ensure). Grade: A &gt;90%, B &gt;75%, C &gt;50%, D &lt;50%.">
+                                    <div class="card-body text-center py-3">
+                                        <div class="text-muted small mb-1">Grooming</div>
+                                        <div class="fs-4 fw-bold">[[ pmAudit.data.estimation_coverage_pct != null ? pmAudit.data.estimation_coverage_pct.toFixed(0) + '%' : '-' ]]</div>
+                                        <span class="badge" :class="pmAuditGradeClass(pmAudit.data.grades_json?.grooming)">[[ pmAudit.data.grades_json?.grooming || '-' ]]</span>
+                                        <div class="text-muted" style="font-size:.7rem">[[ pmAudit.data.tickets_created_by_pm ]] created &middot; [[ pmAudit.data.unestimated_count ]] unestimated</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Transitions -->
+                            <div class="col-md-4 col-lg-2">
+                                <div class="card h-100 border-0 shadow-sm" style="cursor:pointer" @click="pmAuditToggleSection('transitions')"
+                                     title="Total Jira status transitions made by PM this sprint (from changelog). Reopens = PM moving a ticket backward from a done/QA status to an earlier status (quality gate enforcement). Grade: A &gt;20 transitions + &gt;3 reopens, B &gt;10 + &gt;1, C &gt;5, D &lt;5.">
+                                    <div class="card-body text-center py-3">
+                                        <div class="text-muted small mb-1">Transitions</div>
+                                        <div class="fs-4 fw-bold">[[ pmAudit.data.transitions_by_pm || 0 ]]</div>
+                                        <span class="badge" :class="pmAuditGradeClass(pmAudit.data.grades_json?.transitions)">[[ pmAudit.data.grades_json?.transitions || '-' ]]</span>
+                                        <div class="text-muted" style="font-size:.7rem">[[ pmAudit.data.reopens_rejections || 0 ]] reopens/rejections</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Blocker Response -->
+                            <div class="col-md-4 col-lg-2">
+                                <div class="card h-100 border-0 shadow-sm" style="cursor:pointer" @click="pmAuditToggleSection('blocker')"
+                                     title="Avg business hours from when a ticket enters Blocked status to the first PM comment on that ticket. Unengaged = blocked tickets where PM has not commented after 24+ business hours. Scope = tickets added/removed mid-sprint. Grade: A &lt;4h, B &lt;12h, C &lt;24h, D &gt;24h.">
+                                    <div class="card-body text-center py-3">
+                                        <div class="text-muted small mb-1">Blockers</div>
+                                        <div class="fs-4 fw-bold">[[ pmAudit.data.avg_blocked_to_pm_comment_hours != null ? pmAudit.data.avg_blocked_to_pm_comment_hours.toFixed(1) + 'h' : 'N/A' ]]</div>
+                                        <span class="badge" :class="pmAuditGradeClass(pmAudit.data.grades_json?.blocker_response)">[[ pmAudit.data.grades_json?.blocker_response || '-' ]]</span>
+                                        <div class="text-muted" style="font-size:.7rem">[[ pmAudit.data.blocked_no_pm_engagement || 0 ]] unengaged &middot; scope +[[ pmAudit.data.tickets_added_mid_sprint || 0 ]]/-[[ pmAudit.data.tickets_removed_mid_sprint || 0 ]]</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Detail Panels (collapsible) -->
+                        <template v-if="pmAudit.data.detail_json">
+
+                            <!-- Approval Pipeline -->
+                            <div v-if="pmAudit.expandedSection === 'approval'" class="card border-0 shadow-sm mb-3">
+                                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                                    <strong>Approval Pipeline</strong>
+                                    <button class="btn btn-sm btn-outline-secondary" @click="pmAudit.expandedSection = null"><i class="bi bi-x"></i></button>
+                                </div>
+                                <div class="card-body p-0">
+                                    <table class="table table-sm table-hover mb-0">
+                                        <thead><tr><th>Ticket</th><th>Summary</th><th>Time in PA</th><th>Currently Pending</th></tr></thead>
+                                        <tbody>
+                                            <tr v-for="row in (pmAudit.data.detail_json.approval || [])" :key="row.key">
+                                                <td><a :href="(pmAudit.data.jira_url || '') + '/browse/' + row.key" target="_blank" class="text-decoration-none">[[ row.key ]]</a></td>
+                                                <td class="text-truncate" style="max-width:300px">[[ row.summary ]]</td>
+                                                <td>[[ row.pa_hours ]]h</td>
+                                                <td><span v-if="row.currently_pending" class="badge bg-warning text-dark">Yes</span></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                    <p v-if="!(pmAudit.data.detail_json.approval || []).length" class="text-muted text-center py-3 mb-0">No tickets went through Pending Approval</p>
+                                </div>
+                            </div>
+
+                            <!-- Comment Engagement -->
+                            <div v-if="pmAudit.expandedSection === 'engagement'" class="card border-0 shadow-sm mb-3">
+                                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                                    <strong>Comment Engagement</strong>
+                                    <button class="btn btn-sm btn-outline-secondary" @click="pmAudit.expandedSection = null"><i class="bi bi-x"></i></button>
+                                </div>
+                                <div class="card-body p-0">
+                                    <table class="table table-sm table-hover mb-0">
+                                        <thead><tr><th>Ticket</th><th>PM Comments</th><th>Total</th><th>Last By</th><th>Waiting</th></tr></thead>
+                                        <tbody>
+                                            <tr v-for="row in (pmAudit.data.detail_json.engagement || [])" :key="row.key">
+                                                <td><a :href="(pmAudit.data.jira_url || '') + '/browse/' + row.key" target="_blank" class="text-decoration-none">[[ row.key ]]</a></td>
+                                                <td>[[ row.pm_comments ]]</td>
+                                                <td>[[ row.total_comments ]]</td>
+                                                <td class="small">[[ row.last_commenter ]]</td>
+                                                <td><span v-if="row.waiting_on_pm" class="badge bg-danger">Waiting</span></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Responsiveness (same data as engagement, just a different view focus) -->
+                            <div v-if="pmAudit.expandedSection === 'responsiveness'" class="card border-0 shadow-sm mb-3">
+                                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                                    <strong>PM Response Times</strong>
+                                    <button class="btn btn-sm btn-outline-secondary" @click="pmAudit.expandedSection = null"><i class="bi bi-x"></i></button>
+                                </div>
+                                <div class="card-body p-0">
+                                    <table class="table table-sm table-hover mb-0">
+                                        <thead><tr><th>Ticket</th><th>PM Comments</th><th>Waiting on PM</th><th>Last By</th></tr></thead>
+                                        <tbody>
+                                            <tr v-for="row in (pmAudit.data.detail_json.engagement || []).filter(r => r.waiting_on_pm)" :key="row.key">
+                                                <td><a :href="(pmAudit.data.jira_url || '') + '/browse/' + row.key" target="_blank" class="text-decoration-none">[[ row.key ]]</a></td>
+                                                <td>[[ row.pm_comments ]]</td>
+                                                <td><span class="badge bg-danger">Waiting</span></td>
+                                                <td class="small">[[ row.last_commenter ]]</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                    <p v-if="!(pmAudit.data.detail_json.engagement || []).filter(r => r.waiting_on_pm).length" class="text-muted text-center py-3 mb-0">No threads waiting on PM</p>
+                                </div>
+                            </div>
+
+                            <!-- Grooming / Unestimated -->
+                            <div v-if="pmAudit.expandedSection === 'grooming'" class="card border-0 shadow-sm mb-3">
+                                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                                    <strong>Unestimated Tickets</strong>
+                                    <button class="btn btn-sm btn-outline-secondary" @click="pmAudit.expandedSection = null"><i class="bi bi-x"></i></button>
+                                </div>
+                                <div class="card-body p-0">
+                                    <table class="table table-sm table-hover mb-0">
+                                        <thead><tr><th>Ticket</th><th>Summary</th><th>Assignee</th><th>Status</th></tr></thead>
+                                        <tbody>
+                                            <tr v-for="row in (pmAudit.data.detail_json.grooming?.unestimated_tickets || [])" :key="row.key">
+                                                <td><a :href="(pmAudit.data.jira_url || '') + '/browse/' + row.key" target="_blank" class="text-decoration-none">[[ row.key ]]</a></td>
+                                                <td class="text-truncate" style="max-width:300px">[[ row.summary ]]</td>
+                                                <td class="small">[[ row.assignee ]]</td>
+                                                <td><span class="badge bg-secondary">[[ row.status ]]</span></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                    <p v-if="!(pmAudit.data.detail_json.grooming?.unestimated_tickets || []).length" class="text-muted text-center py-3 mb-0">All tickets estimated</p>
+                                </div>
+                            </div>
+
+                            <!-- Transitions -->
+                            <div v-if="pmAudit.expandedSection === 'transitions'" class="card border-0 shadow-sm mb-3">
+                                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                                    <strong>Status Transitions by PM</strong>
+                                    <button class="btn btn-sm btn-outline-secondary" @click="pmAudit.expandedSection = null"><i class="bi bi-x"></i></button>
+                                </div>
+                                <div class="card-body p-0">
+                                    <table class="table table-sm table-hover mb-0">
+                                        <thead><tr><th>Ticket</th><th>From</th><th>To</th><th>When</th><th></th></tr></thead>
+                                        <tbody>
+                                            <tr v-for="(row, i) in (pmAudit.data.detail_json.transitions || []).slice(0, 50)" :key="i">
+                                                <td><a :href="(pmAudit.data.jira_url || '') + '/browse/' + row.key" target="_blank" class="text-decoration-none">[[ row.key ]]</a></td>
+                                                <td class="small">[[ row.from ]]</td>
+                                                <td class="small">[[ row.to ]]</td>
+                                                <td class="small text-muted">[[ row.timestamp ? new Date(row.timestamp).toLocaleDateString() : '' ]]</td>
+                                                <td><span v-if="row.is_reopen" class="badge bg-info">Reopen</span></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Blocker Response -->
+                            <div v-if="pmAudit.expandedSection === 'blocker'" class="card border-0 shadow-sm mb-3">
+                                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                                    <strong>Blocker Response Times</strong>
+                                    <button class="btn btn-sm btn-outline-secondary" @click="pmAudit.expandedSection = null"><i class="bi bi-x"></i></button>
+                                </div>
+                                <div class="card-body p-0">
+                                    <table class="table table-sm table-hover mb-0">
+                                        <thead><tr><th>Ticket</th><th>Summary</th><th>Blocked At</th><th>PM Responded</th><th>Response Time</th></tr></thead>
+                                        <tbody>
+                                            <tr v-for="row in (pmAudit.data.detail_json.blocker_response || [])" :key="row.key">
+                                                <td><a :href="(pmAudit.data.jira_url || '') + '/browse/' + row.key" target="_blank" class="text-decoration-none">[[ row.key ]]</a></td>
+                                                <td class="text-truncate" style="max-width:250px">[[ row.summary ]]</td>
+                                                <td class="small">[[ row.blocked_at ? new Date(row.blocked_at).toLocaleDateString() : '' ]]</td>
+                                                <td class="small">[[ row.pm_responded_at ? new Date(row.pm_responded_at).toLocaleDateString() : '' ]]</td>
+                                                <td>
+                                                    <span v-if="row.response_hours != null">[[ row.response_hours ]]h</span>
+                                                    <span v-else class="badge bg-danger">No response ([[ row.hours_since_blocked ]]h)</span>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                    <p v-if="!(pmAudit.data.detail_json.blocker_response || []).length" class="text-muted text-center py-3 mb-0">No blocked tickets in this sprint</p>
+                                </div>
+                            </div>
+
+                        </template>
+                    </div>
+                </div>
+
                 <!-- ── Agent Settings Tab (Channel config only) ── -->
                 <div v-if="activeTab === 'agent-settings'" class="tab-pane active">
                     <h5 class="mb-4"><i class="bi bi-sliders me-2"></i>Agent Settings</h5>
@@ -2794,6 +3050,13 @@
                         capacityDraft: {},
                         auditBlockId: null,
                     },
+                    pmAudit: {
+                        loading: false,
+                        computing: false,
+                        error: null,
+                        data: null,
+                        expandedSection: null,
+                    },
                 }
             },
             computed: {
@@ -2808,6 +3071,7 @@
                         'timesheets':      'Timesheets',
                         'team':            'Members',
                         'performance':     'Performance',
+                        'pm-audit':        'PM Audit',
                         'violations':      'Alerts',
 
                         'settings':        'Settings',
@@ -3810,6 +4074,10 @@
                             this.activeTab = 'performance';
                             this.loadTeamMembers();
                             if (!this.sp.data && !this.sp.loading) this.loadSprintPulse();
+                            break;
+                        case 'pm-audit':
+                            this.activeTab = 'pm-audit';
+                            if (!this.pmAudit.data && !this.pmAudit.loading) this.loadPmAudit();
                             break;
                         case 'settings':
                             this.activeTab = 'settings';
@@ -4931,6 +5199,44 @@
                     } catch (e) {
                         alert('Failed to save capacity: ' + e.message);
                     }
+                },
+
+                // ── PM Audit ─────────────────────────────────────────────
+                async loadPmAudit() {
+                    this.pmAudit.loading = true;
+                    this.pmAudit.error = null;
+                    try {
+                        const resp = await fetch('/api/pm-audit');
+                        if (resp.status === 404) {
+                            this.pmAudit.data = null;
+                            return;
+                        }
+                        if (!resp.ok) throw new Error('Failed to load PM audit');
+                        const data = await resp.json();
+                        if (data.status === 'no_data') { this.pmAudit.data = null; return; }
+                        this.pmAudit.data = data;
+                    } catch (e) {
+                        this.pmAudit.error = e.message;
+                    } finally {
+                        this.pmAudit.loading = false;
+                    }
+                },
+                async runPmAudit() {
+                    this.pmAudit.computing = true;
+                    try {
+                        await fetch('/api/pm-audit/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+                        // Poll after 30s
+                        setTimeout(() => { this.loadPmAudit(); this.pmAudit.computing = false; }, 35000);
+                    } catch (e) {
+                        this.pmAudit.error = e.message;
+                        this.pmAudit.computing = false;
+                    }
+                },
+                pmAuditGradeClass(grade) {
+                    return { 'A': 'bg-success', 'B': 'bg-primary', 'C': 'bg-warning text-dark', 'D': 'bg-danger' }[grade] || 'bg-secondary';
+                },
+                pmAuditToggleSection(section) {
+                    this.pmAudit.expandedSection = this.pmAudit.expandedSection === section ? null : section;
                 },
             }
         }).mount('#app');

@@ -11,7 +11,7 @@ individual table.create(engine, checkfirst=True) for a specific table.
 
 from ._meta import metadata
 
-from .dashboard import check_runs, active_violations, check_schedules, blocked_ticket_analyses, blocked_sent_alerts, timesheet_weeks, timesheet_entries, channel_config, system_config
+from .dashboard import check_runs, active_violations, check_schedules, blocked_ticket_analyses, blocked_sent_alerts, timesheet_weeks, timesheet_entries, channel_config, system_config, pm_audit_snapshots
 from .pm_requests import pending_pm_requests, pm_request_revisions
 from .activity import activities
 from .team_members import team_members
@@ -41,6 +41,7 @@ __all__ = [
     "timesheet_entries",
     "channel_config",
     "system_config",
+    "pm_audit_snapshots",
     # PM Requests
     "pending_pm_requests",
     "pm_request_revisions",

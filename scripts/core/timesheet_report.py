@@ -30,8 +30,7 @@ load_dotenv(PROJECT_ROOT / ".env")
 import pytz
 import requests
 
-from src.tools.jira.search import search_jira
-from src.tools.jira.get_worklogs import get_issue_worklogs, fmt_seconds
+from trinity.jira import search_jira, get_issue_worklogs, fmt_seconds
 
 
 def get_week_bounds(week_offset: int = 0, current_week: bool = False) -> tuple:
@@ -185,7 +184,7 @@ def _get_issue_extras(issue_key: str) -> tuple:
     Returns:
         (estimate_seconds: int, due_date: str|None)  e.g. (14400, "2026-03-15")
     """
-    from src.tools.base import get_jira_auth_headers, JIRA_BASE_URL
+    from trinity.base import get_jira_auth_headers, JIRA_BASE_URL
 
     try:
         response = requests.get(

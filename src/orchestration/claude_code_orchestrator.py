@@ -192,20 +192,22 @@ YOUR CAPABILITIES:
 ------------------
 You have access to these tools via Python CLI:
 
-**Jira Tools (Python CLI - NOT MCP):**
-- python -m src.tools.jira.search "JQL query" --max-results 10
-- python -m src.tools.jira.get_issue ISSUE_KEY [--include-comments]
-- python -m src.tools.jira.add_comment ISSUE_KEY "comment text" --mention "account_id" "Name"
-- python -m src.tools.jira.edit_issue ISSUE_KEY --priority High --assignee "account_id"
-- python -m src.tools.jira.transition_issue ISSUE_KEY "Status Name"
-- python -m src.tools.jira.lookup_user "email or name"
-- python -m src.tools.jira.create_issue PROJECT_KEY --type Bug --summary "Title" --description "Details"
+**Jira Tools (trinity CLI — JSON output by default):**
+- trinity jira search "JQL query" --max-results 10
+- trinity jira show ISSUE_KEY [--comments]
+- trinity jira comment ISSUE_KEY "comment text" --mention "account_id" "Name"
+- trinity jira edit ISSUE_KEY --priority High --assignee "account_id"
+- trinity jira transition ISSUE_KEY "Status Name"
+- trinity jira user "email or name"
+- trinity jira create --project PROJECT_KEY --type bug --summary "Title" --description "Details"
 
-**Bitbucket Tools (bitbucket-cli):**
-- bb-pr list WORKSPACE/REPO
-- bb-pr get WORKSPACE/REPO PR_ID
-- bb-pr comment WORKSPACE/REPO PR_ID "comment text"
-- bb-pr approve WORKSPACE/REPO PR_ID
+**Bitbucket Tools (trinity CLI):**
+- trinity bb list [--state OPEN|MERGED|DECLINED] [--author NAME]
+- trinity bb show PR_ID [--comments]
+- trinity bb diff PR_ID
+- trinity bb activity PR_ID  (timeline: comments, approvals, commits)
+- trinity bb comment PR_ID "comment text"
+  (override workspace/repo with: trinity bb -w WORKSPACE -r REPO <subcommand>)
 
 **Slack Tools:**
 - Use Slack API tools as needed (monitor has send_response() method)
@@ -440,49 +442,48 @@ NEW JIRA COMMENT:
 - Comment: "{comment_text}"
 - Time: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
-AVAILABLE JIRA TOOLS (use these instead of MCP):
-All tools are in src/tools/jira/ and can be called via Python CLI:
+AVAILABLE JIRA TOOLS (use trinity CLI — JSON output by default):
 
 1. **Search Issues:**
    ```bash
-   python -m src.tools.jira.search "project = YOUR_PROJECT AND status = 'In Progress'" --max-results 10
+   trinity jira search "project = YOUR_PROJECT AND status = 'In Progress'" --max-results 10
    ```
 
 2. **Get Issue Details:**
    ```bash
-   python -m src.tools.jira.get_issue {issue_key}
-   python -m src.tools.jira.get_issue {issue_key} --include-comments
+   trinity jira show {issue_key}
+   trinity jira show {issue_key} --comments
    ```
 
 3. **Add Comment (with @mentions):**
    ```bash
-   python -m src.tools.jira.add_comment {issue_key} "Hi @{commenter}, your comment text here" --mention "{commenter_account_id}" "{commenter}"
+   trinity jira comment {issue_key} "Hi @{commenter}, your comment text here" --mention "{commenter_account_id}" "{commenter}"
    ```
    Note: The @Name in text will become a clickable mention.
 
 4. **Edit Issue Fields:**
    ```bash
-   python -m src.tools.jira.edit_issue {issue_key} --priority High
-   python -m src.tools.jira.edit_issue {issue_key} --assignee "account_id_here"
-   python -m src.tools.jira.edit_issue {issue_key} --add-labels "needs-review"
+   trinity jira edit {issue_key} --priority High
+   trinity jira edit {issue_key} --assignee "account_id_here"
+   trinity jira edit {issue_key} --add-labels "needs-review"
    ```
 
 5. **Transition Issue Status:**
    ```bash
-   python -m src.tools.jira.get_transitions {issue_key}  # See available transitions
-   python -m src.tools.jira.transition_issue {issue_key} "Done"
-   python -m src.tools.jira.transition_issue {issue_key} "In Progress"
+   trinity jira transitions {issue_key}             # See available transitions
+   trinity jira transition {issue_key} "Done"
+   trinity jira transition {issue_key} "In Progress"
    ```
 
 6. **Lookup User:**
    ```bash
-   python -m src.tools.jira.lookup_user "user@example.com"
-   python -m src.tools.jira.lookup_user "John Doe"
+   trinity jira user "user@example.com"
+   trinity jira user "John Doe"
    ```
 
 7. **List Projects:**
    ```bash
-   python -m src.tools.jira.list_projects
+   trinity jira projects
    ```
 
 YOUR TASK:

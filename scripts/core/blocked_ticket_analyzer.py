@@ -32,7 +32,7 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src.tools.base import get_jira_auth_headers, JIRA_BASE_URL
+from trinity.base import get_jira_auth_headers, JIRA_BASE_URL
 
 # ─── Configuration ─────────────────────────────────────────────────────────────
 

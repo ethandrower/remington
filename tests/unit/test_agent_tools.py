@@ -2,7 +2,7 @@
 Unit tests for the @tool wrappers in src/agents/tools/jira_tools.py.
 
 Strategy:
-  - Patch the underlying src/tools/jira/* functions (not the HTTP layer).
+  - Patch the underlying trinity.jira.* functions (not the HTTP layer).
   - Verify each @tool function formats its output correctly and handles errors.
   - No network calls, no real credentials needed.
 
@@ -231,7 +231,7 @@ class TestTransitionJiraTicketTool:
 
     def test_successful_transition_confirms_new_status(self):
         fake_result = {"error": False, "new_status": "Done"}
-        with patch("src.tools.jira.transition_issue.transition_jira_issue", return_value=fake_result):
+        with patch("trinity.jira.transition_issue.transition_jira_issue", return_value=fake_result):
             from src.agents.tools.jira_tools import transition_jira_ticket
             result = transition_jira_ticket.invoke({"issue_key": "ECD-100", "new_status": "Done"})
 
@@ -244,7 +244,7 @@ class TestTransitionJiraTicketTool:
             "message": "Transition not found",
             "available_transitions": ["In Progress", "Done", "Blocked"],
         }
-        with patch("src.tools.jira.transition_issue.transition_jira_issue", return_value=fake_result):
+        with patch("trinity.jira.transition_issue.transition_jira_issue", return_value=fake_result):
             from src.agents.tools.jira_tools import transition_jira_ticket
             result = transition_jira_ticket.invoke({"issue_key": "ECD-100", "new_status": "Flying"})
 
@@ -255,7 +255,7 @@ class TestTransitionJiraTicketTool:
 
     def test_failed_transition_without_available_options(self):
         fake_result = {"error": True, "message": "Unknown error"}
-        with patch("src.tools.jira.transition_issue.transition_jira_issue", return_value=fake_result):
+        with patch("trinity.jira.transition_issue.transition_jira_issue", return_value=fake_result):
             from src.agents.tools.jira_tools import transition_jira_ticket
             result = transition_jira_ticket.invoke({"issue_key": "ECD-100", "new_status": "Nope"})
 

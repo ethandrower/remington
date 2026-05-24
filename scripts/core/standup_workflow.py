@@ -76,7 +76,7 @@ class StandupWorkflow:
         self.section_header("📊 SECTION 1: SPRINT BURNDOWN ANALYSIS")
 
         try:
-            from src.tools.jira.search import search_jira
+            from trinity.jira import search_jira
 
             self.log("Querying Jira for current sprint issues...")
 
@@ -165,7 +165,7 @@ class StandupWorkflow:
         self.section_header("🚨 SECTION 2: CODE-TICKET GAP DETECTION")
 
         try:
-            from src.tools.jira.search import search_jira
+            from trinity.jira import search_jira
 
             self.log("Querying In Progress tickets from Jira...")
 

@@ -159,6 +159,64 @@ channel_config = Table(
 # Generic key-value store for project settings configurable from the dashboard.
 # Priority: DB value > ENV fallback > None
 
+# ── PM Audit Snapshots ─────────────────────────────────────────────────────
+
+pm_audit_snapshots = Table(
+    "pm_audit_snapshots",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("pm_account_id", String(100), nullable=False),
+    Column("pm_display_name", String(200)),
+    Column("sprint_id", String(100)),
+    Column("sprint_name", String(200)),
+    Column("computed_at", DateTime, nullable=False),
+
+    # A. Approval Velocity
+    Column("avg_pending_approval_hours", Float),
+    Column("pending_approval_backlog", Integer, default=0),
+    Column("approvals_completed", Integer, default=0),
+
+    # B. Comment Activity
+    Column("total_pm_comments", Integer, default=0),
+    Column("tickets_engaged", Integer, default=0),
+    Column("total_sprint_tickets", Integer, default=0),
+    Column("engagement_ratio", Float),
+    Column("threads_waiting_on_pm", Integer, default=0),
+    Column("avg_pm_response_hours", Float),
+
+    # C. Ticket Creation & Grooming
+    Column("tickets_created_by_pm", Integer, default=0),
+    Column("estimation_coverage_pct", Float),
+    Column("unestimated_count", Integer, default=0),
+
+    # D. Status Transition Activity
+    Column("transitions_by_pm", Integer, default=0),
+    Column("reopens_rejections", Integer, default=0),
+
+    # E. Sprint Scope Management
+    Column("tickets_added_mid_sprint", Integer, default=0),
+    Column("tickets_removed_mid_sprint", Integer, default=0),
+    Column("assignment_balance_cv", Float),
+
+    # F. Blocker Response
+    Column("avg_blocked_to_pm_comment_hours", Float),
+    Column("blocked_no_pm_engagement", Integer, default=0),
+
+    # Grades
+    Column("overall_grade", String(2)),
+    Column("grades_json", Text),  # JSON: {"approval": "A", "engagement": "B", ...}
+
+    # Detail drill-down
+    Column("detail_json", Text),  # Full per-ticket breakdown
+
+    UniqueConstraint("pm_account_id", "sprint_id", "computed_at", name="uq_pm_audit_snapshot"),
+)
+
+Index("idx_pm_audit_pm", pm_audit_snapshots.c.pm_account_id)
+Index("idx_pm_audit_sprint", pm_audit_snapshots.c.sprint_id)
+Index("idx_pm_audit_computed", pm_audit_snapshots.c.computed_at)
+
+
 system_config = Table(
     "system_config",
     metadata,

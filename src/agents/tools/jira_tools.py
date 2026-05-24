@@ -21,7 +21,7 @@ uses two things from the function to teach the LLM about it:
    receives this as a ToolMessage and uses it for its next reasoning step.
    Format it clearly — the LLM will quote from it in its response.
 
-These tools wrap the existing src/tools/jira/ functions so we don't duplicate
+These tools wrap the trinity.jira functions so we don't duplicate
 any API logic. The @tool layer just handles the LLM interface (schema +
 description) and formats the output for readability.
 """
@@ -34,15 +34,16 @@ from typing import Optional
 
 from langchain_core.tools import tool
 
-# Ensure project root is on the path so src.tools.jira.* imports work
 _root = Path(__file__).parent.parent.parent.parent
 if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
 
-from src.tools.jira.search import search_jira as _search_jira
-from src.tools.jira.get_issue import get_jira_issue as _get_issue
-from src.tools.jira.add_comment import add_jira_comment as _add_comment
-from src.tools.jira.lookup_user import lookup_jira_user as _lookup_user
+from trinity.jira import (
+    search_jira as _search_jira,
+    get_jira_issue as _get_issue,
+    add_jira_comment as _add_comment,
+    lookup_jira_user as _lookup_user,
+)
 
 # Jira web URL for building ticket links in responses
 JIRA_WEB_URL = os.getenv("JIRA_INSTANCE_URL", "").rstrip("/")
@@ -199,8 +200,7 @@ def transition_jira_ticket(issue_key: str, new_status: str) -> str:
         Confirmation that the transition succeeded, or an error with available
         transitions if the requested status is not reachable.
     """
-    # Import here to avoid circular issues at module load
-    from src.tools.jira.transition_issue import transition_jira_issue
+    from trinity.jira import transition_jira_issue
 
     result = transition_jira_issue(issue_key, new_status)
 

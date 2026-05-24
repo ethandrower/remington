@@ -1,6 +1,7 @@
 {
   "permissions": {
     "allow": [
+      "Bash(trinity:*)",
       "mcp__atlassian__searchJiraIssuesUsingJql",
       "mcp__atlassian__getJiraIssue",
       "mcp__atlassian__editJiraIssue",

@@ -1129,7 +1129,7 @@ def get_sprint_pulse():
     """
     try:
         import requests as req
-        from src.tools.base import get_jira_auth_headers, ATLASSIAN_CLOUD_ID, JIRA_WEB_URL
+        from trinity.base import get_jira_auth_headers, ATLASSIAN_CLOUD_ID, JIRA_WEB_URL
 
         project_key = os.getenv('ATLASSIAN_PROJECT_KEY', '').split(',')[0].strip()
         if not project_key:
@@ -1163,7 +1163,7 @@ def get_sprint_burndown():
     """
     try:
         import requests as req
-        from src.tools.base import get_jira_auth_headers, ATLASSIAN_CLOUD_ID
+        from trinity.base import get_jira_auth_headers, ATLASSIAN_CLOUD_ID
         from datetime import datetime, timedelta
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -1422,7 +1422,7 @@ def get_planning_sprints():
     """
     try:
         import requests as req
-        from src.tools.base import get_jira_auth_headers, ATLASSIAN_CLOUD_ID
+        from trinity.base import get_jira_auth_headers, ATLASSIAN_CLOUD_ID
 
         project_key = os.getenv('ATLASSIAN_PROJECT_KEY', '').split(',')[0].strip()
         if not project_key:
@@ -1480,7 +1480,7 @@ def get_sprint_planning():
     """
     try:
         import requests as req
-        from src.tools.base import get_jira_auth_headers, ATLASSIAN_CLOUD_ID
+        from trinity.base import get_jira_auth_headers, ATLASSIAN_CLOUD_ID
         from datetime import datetime, timedelta
 
         project_key = os.getenv('ATLASSIAN_PROJECT_KEY', '').split(',')[0].strip()
@@ -1974,7 +1974,7 @@ def get_agent_sprint_report():
     """
     try:
         import requests as req
-        from src.tools.base import get_jira_auth_headers, ATLASSIAN_CLOUD_ID, JIRA_WEB_URL
+        from trinity.base import get_jira_auth_headers, ATLASSIAN_CLOUD_ID, JIRA_WEB_URL
         from src.dashboard.sprint_report import build_report
         from concurrent.futures import ThreadPoolExecutor, as_completed as _as_completed
 
@@ -2306,6 +2306,99 @@ def save_system_settings():
         return jsonify({"success": True, "saved": len(values)})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+# ============================================================================
+# PM AUDIT
+# ============================================================================
+
+@app.route('/api/pm-audit')
+def get_pm_audit():
+    """Get latest PM audit snapshot (or compute if stale >1h)."""
+    try:
+        from sqlalchemy import text as sa_text
+
+        pm_account_id = request.args.get('pm_account_id')
+        sprint_id = request.args.get('sprint_id')
+        force = request.args.get('force', '0') == '1'
+
+        with db.engine.connect() as conn:
+            # Build query for latest snapshot
+            conditions = []
+            params = {}
+            if pm_account_id:
+                conditions.append("pm_account_id = :pm_id")
+                params['pm_id'] = pm_account_id
+            if sprint_id:
+                conditions.append("sprint_id = :sprint_id")
+                params['sprint_id'] = sprint_id
+
+            where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+            row = conn.execute(sa_text(f"""
+                SELECT * FROM pm_audit_snapshots
+                {where}
+                ORDER BY computed_at DESC LIMIT 1
+            """), params).mappings().first()
+
+        if row and not force:
+            result = dict(row)
+            # Parse JSON blobs
+            for json_col in ('grades_json', 'detail_json'):
+                if result.get(json_col) and isinstance(result[json_col], str):
+                    try:
+                        result[json_col] = json.loads(result[json_col])
+                    except Exception:
+                        pass
+            # Serialize datetimes
+            for k, v in result.items():
+                if isinstance(v, datetime):
+                    result[k] = v.isoformat() + 'Z'
+            return jsonify(result)
+
+        if force:
+            return jsonify({'status': 'use_post', 'message': 'Use POST /api/pm-audit/run to trigger recompute'}), 202
+
+        return jsonify({'status': 'no_data', 'message': 'No PM audit data yet. Run POST /api/pm-audit/run to compute.'}), 404
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/pm-audit/run', methods=['POST'])
+def run_pm_audit():
+    """Trigger PM audit computation in background (Heroku 30s timeout safe)."""
+    import threading
+    try:
+        body = request.json or {}
+        pm_id = body.get('pm_account_id')
+        sprint_id = body.get('sprint_id')
+        dry_run = body.get('dry_run', False)
+
+        cmd = ['python', '-m', 'scripts.core.pm_audit']
+        if pm_id:
+            cmd.extend(['--pm-id', pm_id])
+        if sprint_id:
+            cmd.extend(['--sprint-id', sprint_id])
+        if dry_run:
+            cmd.append('--dry-run')
+
+        project_root = str(Path(__file__).parent.parent.parent)
+
+        def _run():
+            try:
+                subprocess.run(cmd, timeout=300, cwd=project_root)
+            except Exception:
+                pass
+
+        thread = threading.Thread(target=_run, daemon=True)
+        thread.start()
+
+        return jsonify({
+            'success': True,
+            'message': 'PM audit started in background. Refresh in ~30 seconds to see results.',
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 # ============================================================================

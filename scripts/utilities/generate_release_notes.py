@@ -28,11 +28,70 @@ from typing import Optional, List, Dict
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.tools.confluence.search import search_confluence
-from src.tools.confluence.get_page import get_confluence_page
-from src.tools.confluence.create_page import create_confluence_page
-from src.tools.confluence.update_page import update_confluence_page, add_feature_to_release_notes
-from src.tools.jira.get_release_issues import get_release_issues, get_current_sprint_completed
+from trinity.confluence import (
+    search_confluence,
+    get_confluence_page,
+    create_confluence_page,
+    update_confluence_page,
+)
+from trinity.jira import get_release_issues, get_current_sprint_completed
+
+
+def add_feature_to_release_notes(
+    page_id: str,
+    jira_key: str,
+    feature_title: str,
+    description: str,
+    module: str = "General",
+) -> dict:
+    """Insert a feature entry into a release-notes page (idempotent on jira_key)."""
+    current_page = get_confluence_page(page_id, content_format="storage")
+    if current_page.get("error"):
+        return current_page
+
+    current_body = current_page.get("body", "")
+    if jira_key in current_body:
+        return {"skipped": True, "message": f"{jira_key} already exists", "page_id": page_id}
+
+    feature_html = (
+        f"\n<h3>{feature_title}</h3>\n"
+        f"<p><strong>Jira:</strong> <a href=\"{JIRA_WEB_URL}/browse/{jira_key}\">{jira_key}</a></p>\n"
+        f"<p>{description}</p>\n"
+    )
+    table_row = (
+        f"<tr><td>{module}</td><td>{feature_title}</td>"
+        f"<td>{description[:100]}{'...' if len(description) > 100 else ''}</td>"
+        f"<td><a href=\"{JIRA_WEB_URL}/browse/{jira_key}\">{jira_key}</a></td></tr>"
+    )
+
+    if "<h2>What's New</h2>" in current_body:
+        whats_new_idx = current_body.index("<h2>What's New</h2>")
+        rest = current_body[whats_new_idx + len("<h2>What's New</h2>"):]
+        next_h2 = rest.find("<h2>")
+        if next_h2 != -1:
+            insert_point = whats_new_idx + len("<h2>What's New</h2>") + next_h2
+            new_body = current_body[:insert_point] + feature_html + "\n" + current_body[insert_point:]
+        else:
+            new_body = current_body.replace(
+                "<h2>What's New</h2>", f"<h2>What's New</h2>\n{feature_html}"
+            )
+    elif "<h2>Known Issues</h2>" in current_body:
+        new_body = current_body.replace(
+            "<h2>Known Issues</h2>", f"{feature_html}\n\n<h2>Known Issues</h2>"
+        )
+    else:
+        new_body = f"{current_body}\n\n{feature_html}"
+
+    if "</table>" in new_body:
+        new_body = new_body.replace("</table>", f"{table_row}\n</table>")
+
+    return update_confluence_page(
+        page_id=page_id,
+        body=new_body,
+        title=current_page.get("title"),
+        version=current_page.get("version"),
+        version_message=f"Added feature: {jira_key} - {feature_title}",
+    )
 
 # Configuration
 RELEASE_NOTES_PARENT_ID = os.getenv("CONFLUENCE_RELEASE_NOTES_PARENT_ID", "")

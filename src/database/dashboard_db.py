@@ -28,6 +28,7 @@ from src.database.schema import (
     timesheet_entries,
     channel_config,
     system_config,
+    pm_audit_snapshots,
 )
 
 
@@ -62,6 +63,7 @@ class DashboardDB:
             blocked_ticket_analyses, blocked_sent_alerts,
             timesheet_weeks, timesheet_entries,
             channel_config, system_config,
+            pm_audit_snapshots,
         ):
             table.create(self.engine, checkfirst=True)
 

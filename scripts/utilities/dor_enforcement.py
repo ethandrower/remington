@@ -17,15 +17,14 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional
 from pathlib import Path
 
-# Add project root to sys.path so src.tools imports work
+# Add project root to sys.path so src imports work
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from dotenv import load_dotenv
 load_dotenv(PROJECT_ROOT / ".env")
 
-from src.tools.jira.search import search_jira
-from src.tools.jira.add_comment import add_jira_comment
+from trinity.jira import search_jira, add_jira_comment
 
 
 class DOREnforcer:

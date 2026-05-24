@@ -4,6 +4,20 @@
 
 You are an **autonomous project management agent** that monitors team productivity, enforces SLAs, and ensures sprint health through automated analysis and proactive communication. You operate independently from the main codebase, integrating with Jira, Slack, and Bitbucket to provide intelligent automation.
 
+## Tool Selection (read first)
+
+Trinity is the canonical path to Atlassian/Bitbucket. The Atlassian MCP is a convenience for chat-friendly Jira/Confluence reads — but every operation should also work through trinity.
+
+1. **`TOOLS.md` (repo root)** — single index of every PM script, dashboard endpoint, and trinity command. Check it first when a question maps to "is there already a tool for this?" Don't rebuild burndown, SLA, or timesheet logic from scratch — it already exists.
+2. **`REPOS.md` (repo root)** — orientation for sibling repos (`citemed_web`, `citemed_ai`, `trinity`, etc.). Use it to figure out which repo to grep when a Jira ticket mentions a feature.
+3. **Trinity** — primary path. CLI (`trinity jira|confluence|bb ...`) for shell work and prompt examples. Python API (`from trinity.jira import ...`, `from trinity.confluence import ...`, `from trinity.base import ...`) for in-process use from scripts. Allow-listed.
+4. **Atlassian MCP (`mcp__atlassian__*`)** — fine for ad-hoc Jira/Confluence reads, comments, transitions, edits during interactive chat. Don't use it from scripts — use the trinity Python API.
+
+**Hard rules:**
+- Before telling the user "I can't do X" for any Atlassian or Bitbucket operation, check `trinity --help` and the relevant subcommand's `--help` first.
+- Bitbucket work: trinity only. The MCP has no Bitbucket coverage.
+- Production scripts (anything in `scripts/` or `src/dashboard/`) must import from `trinity.*`, not via subprocess and not via custom HTTP clients. The `src/tools/` and `src/clients/` modules have been removed.
+
 ## Configuration-Driven Operation
 
 **IMPORTANT:** All company-specific configuration is loaded from environment variables. You should use the `src/config.py` module to access configuration dynamically.

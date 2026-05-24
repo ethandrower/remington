@@ -14,7 +14,7 @@ you can run it directly for testing:
 
 Configuration:
     ATLASSIAN_PROJECT_KEY  Comma-separated project keys to query (e.g. "ECD,MDP")
-    All other Jira vars come from src.tools.jira.base
+    All other Jira vars come from trinity.base
 """
 
 import os
@@ -25,7 +25,7 @@ from typing import Dict, List, Optional, Tuple
 
 import requests
 
-from src.tools.jira.base import get_jira_auth_headers, JIRA_BASE_URL, format_error
+from trinity.base import get_jira_auth_headers, JIRA_BASE_URL, format_error
 from src.team_roster import get_all_team_members, refresh_from_db
 
 

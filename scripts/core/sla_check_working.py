@@ -6,11 +6,23 @@ Checks Jira and Bitbucket for SLA violations and posts to Slack with links
 
 import os
 import sys
-import subprocess
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Dict, Any
+
+from trinity.jira import search_jira, get_status_history
+
+
+def _time_in_current_status(key: str, fallback_hours: float) -> float:
+    """Return time-in-current-status hours from trinity, or fallback on any error."""
+    try:
+        history = get_status_history(key)
+        if history.get("error"):
+            return fallback_hours
+        return history.get("time_in_current_status_hours", fallback_hours)
+    except Exception:
+        return fallback_hours
 
 # Add parent to path for bitbucket-cli import
 sys.path.append(str(Path(__file__).parent.parent))
@@ -137,20 +149,10 @@ def check_jira_slas_direct() -> List[Dict[str, Any]]:
         project_clause = f'project IN ({", ".join(project_keys)})' if len(project_keys) > 1 else f'project = {project_keys[0]}'
         jql = f'{project_clause} AND sprint in openSprints() AND status NOT IN (Done, Closed, Cancelled)'
 
-        result = subprocess.run(
-            ["python", "-m", "src.tools.jira.search", jql, "--max-results", "100"],
-            capture_output=True,
-            text=True,
-            timeout=30  # Much faster than Claude MCP!
-        )
-
-        if result.returncode != 0:
-            # stdout contains the JSON error body from Jira; stderr has Python warnings
-            error_detail = result.stdout.strip() or result.stderr.strip()
-            print(f"   ❌ Jira search failed: {error_detail}")
-            raise RuntimeError(f"Jira search subprocess failed (exit {result.returncode}): {error_detail}")
-
-        data = json.loads(result.stdout)
+        data = search_jira(jql, max_results=100)
+        if data.get("error"):
+            print(f"   ❌ Jira search failed: {data.get('message') or data}")
+            raise RuntimeError(f"Jira search failed: {data}")
         tickets = data.get('issues', [])
         print(f"   Found {len(tickets)} open tickets")
 
@@ -180,25 +182,7 @@ def check_jira_slas_direct() -> List[Dict[str, Any]]:
 
             # 1. Check QA SLAs (24 hour threshold - strict!)
             if status in ['In QA', 'QA', 'Ready for QA']:
-                # Use status history to get ACCURATE time in QA (not affected by comments)
-                try:
-                    status_history_result = subprocess.run(
-                        ["python", "-m", "src.tools.jira.get_status_history", key],
-                        capture_output=True,
-                        text=True,
-                        timeout=10
-                    )
-
-                    if status_history_result.returncode == 0:
-                        history_data = json.loads(status_history_result.stdout)
-                        time_in_qa = history_data.get('time_in_current_status_hours', time_since_update)
-                    else:
-                        # Fallback to updated timestamp if status history fails
-                        time_in_qa = time_since_update
-                except Exception:
-                    # Fallback to updated timestamp on any error
-                    time_in_qa = time_since_update
-
+                time_in_qa = _time_in_current_status(key, time_since_update)
                 if time_in_qa > 24:
                     violations.append({
                         'type': 'qa_stale',
@@ -213,23 +197,7 @@ def check_jira_slas_direct() -> List[Dict[str, Any]]:
 
             # 2. Check Pending Approval (48 hour threshold)
             elif status == 'Pending Approval':
-                # Use status history for accurate time in Pending Approval
-                try:
-                    status_history_result = subprocess.run(
-                        ["python", "-m", "src.tools.jira.get_status_history", key],
-                        capture_output=True,
-                        text=True,
-                        timeout=10
-                    )
-
-                    if status_history_result.returncode == 0:
-                        history_data = json.loads(status_history_result.stdout)
-                        time_in_pending = history_data.get('time_in_current_status_hours', time_since_update)
-                    else:
-                        time_in_pending = time_since_update
-                except Exception:
-                    time_in_pending = time_since_update
-
+                time_in_pending = _time_in_current_status(key, time_since_update)
                 if time_in_pending > 48:
                     violations.append({
                         'type': 'pending_approval',
@@ -244,19 +212,7 @@ def check_jira_slas_direct() -> List[Dict[str, Any]]:
 
             # 3. Check Blocked status (24h threshold — uses status history, not comment time)
             elif 'Blocked' in status or 'blocked' in ticket.get('labels', []):
-                try:
-                    status_history_result = subprocess.run(
-                        ["python", "-m", "src.tools.jira.get_status_history", key],
-                        capture_output=True, text=True, timeout=10
-                    )
-                    if status_history_result.returncode == 0:
-                        history_data = json.loads(status_history_result.stdout)
-                        time_in_blocked = history_data.get('time_in_current_status_hours', time_since_update)
-                    else:
-                        time_in_blocked = time_since_update
-                except Exception:
-                    time_in_blocked = time_since_update
-
+                time_in_blocked = _time_in_current_status(key, time_since_update)
                 if time_in_blocked > 24:
                     violations.append({
                         'type': 'blocked_ticket',
@@ -271,19 +227,7 @@ def check_jira_slas_direct() -> List[Dict[str, Any]]:
 
             # 4. Check Changes Requested (48h for dev to address QA feedback and push back)
             elif status == 'Changes Requested':
-                try:
-                    status_history_result = subprocess.run(
-                        ["python", "-m", "src.tools.jira.get_status_history", key],
-                        capture_output=True, text=True, timeout=10
-                    )
-                    if status_history_result.returncode == 0:
-                        history_data = json.loads(status_history_result.stdout)
-                        time_in_changes = history_data.get('time_in_current_status_hours', time_since_update)
-                    else:
-                        time_in_changes = time_since_update
-                except Exception:
-                    time_in_changes = time_since_update
-
+                time_in_changes = _time_in_current_status(key, time_since_update)
                 if time_in_changes > 48:
                     violations.append({
                         'type': 'changes_requested',

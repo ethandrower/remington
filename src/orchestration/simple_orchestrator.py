@@ -3,7 +3,7 @@ Simple Orchestrator - Agent reasoning cycle
 Flow: Webhook → Gather Context → Think (Claude) → Act → Log
 """
 from src.database.models import get_session, AgentCycle, WebhookEvent
-from src.clients.jira_api_client import JiraAPIClient
+from trinity.jira import get_jira_issue
 from anthropic import Anthropic
 import os
 import json
@@ -27,12 +27,12 @@ class SimpleOrchestrator:
     """
 
     def __init__(self):
-        # Initialize clients
-        try:
-            self.jira = JiraAPIClient()
-        except ValueError:
-            print("⚠️  Warning: Jira client not configured (missing credentials)")
-            self.jira = None
+        self.jira_available = bool(
+            os.getenv("ATLASSIAN_SERVICE_ACCOUNT_EMAIL")
+            and os.getenv("ATLASSIAN_SERVICE_ACCOUNT_TOKEN")
+        )
+        if not self.jira_available:
+            print("⚠️  Warning: Jira credentials not configured")
 
         # Initialize Claude
         api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -108,10 +108,12 @@ class SimpleOrchestrator:
         """
         print(f"📊 Gathering context for {issue_key}...")
 
-        if self.jira:
+        if self.jira_available:
             try:
-                issue = self.jira.get_issue(issue_key)
-                comments = self.jira.get_comments(issue_key)
+                issue = get_jira_issue(issue_key, include_comments=True)
+                if issue.get("error"):
+                    raise RuntimeError(issue.get("message") or "Jira fetch failed")
+                comments = issue.get("comments", []) or []
 
                 context = {
                     "issue": {
@@ -279,9 +281,10 @@ Keep responses professional, concise, and helpful.
             })
 
             # To actually post to Jira (enable when ready):
-            # if self.jira:
+            # from trinity.jira import add_jira_comment
+            # if self.jira_available:
             #     try:
-            #         self.jira.add_comment(issue_key, response_text)
+            #         add_jira_comment(issue_key, response_text)
             #         actions[-1]["status"] = "executed"
             #     except Exception as e:
             #         actions[-1]["status"] = "failed"

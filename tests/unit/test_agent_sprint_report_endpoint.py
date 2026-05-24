@@ -100,9 +100,9 @@ def client(monkeypatch):
     mock_db = MagicMock()
     mock_db.get_team_members.return_value = [_team_member()]
 
-    with patch('src.tools.base.ATLASSIAN_CLOUD_ID', 'test-cloud-id'), \
-         patch('src.tools.base.JIRA_WEB_URL', 'https://example.atlassian.net'), \
-         patch('src.tools.base.get_jira_auth_headers', return_value={}), \
+    with patch('trinity.base.ATLASSIAN_CLOUD_ID', 'test-cloud-id'), \
+         patch('trinity.base.JIRA_WEB_URL', 'https://example.atlassian.net'), \
+         patch('trinity.base.get_jira_auth_headers', return_value={}), \
          patch('src.dashboard.app.db', mock_db):
         from src.dashboard.app import app
         app.config['TESTING'] = True
