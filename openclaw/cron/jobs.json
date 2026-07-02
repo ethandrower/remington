@@ -1,0 +1,139 @@
+{
+  "version": 2,
+  "_comment": "Remington's cron routines for agentId 'pm'. STAGED DISABLED (enabled:false) until (a) the pm agent exists in openclaw.json, (b) the Atlassian token is in the gateway env so pm/trinity tools authenticate, and (c) Slack channel IDs are filled into each delivery.to + message. Flip enabled:true per job once verified. Merge these into ~/.openclaw/cron/jobs.json (or import via the openclaw cron CLI). Times are America/New_York per ROUTINES.md.",
+  "jobs": [
+    {
+      "id": "pm-sla-sweep",
+      "agentId": "pm",
+      "name": "sla-sweep",
+      "description": "Hourly SLA sweep (QA stalled / Pending-Approval / Blocked / Changes-Requested), business hours",
+      "enabled": false,
+      "createdAtMs": 1782000000000,
+      "updatedAtMs": 1782000000000,
+      "schedule": { "kind": "cron", "expr": "0 9-18 * * 1-5", "tz": "America/New_York", "staggerMs": 60000 },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Run the SLA sweep. Read tasks/sla-sweep.md and execute it: read the `sla` block from STATE.md, call pm.sla_check(prior_state=<that block>), post any alerts_to_send to the SLA channels, and write the returned state back to STATE.md. Obey the self-loop guard and the write-gate (Jira @-mention escalations are proposed, not auto-fired). If there are zero new alerts, stay silent.",
+        "timeoutSeconds": 600
+      },
+      "delivery": { "mode": "none", "channel": "slack", "to": "channel:REPLACE_SLA_VIOLATIONS", "bestEffort": false },
+      "deleteAfterRun": false
+    },
+    {
+      "id": "pm-standup",
+      "agentId": "pm",
+      "name": "standup",
+      "description": "Daily 7-part standup + per-person daily priorities",
+      "enabled": false,
+      "createdAtMs": 1782000000000,
+      "updatedAtMs": 1782000000000,
+      "schedule": { "kind": "cron", "expr": "0 9 * * 1-5", "tz": "America/New_York", "staggerMs": 60000 },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Run the daily standup. Read tasks/standup.md and execute it: pass STATE.md (at least the `sla` and `action_items` blocks) into pm.standup(prior_state=...), compose the 7-part digest plus daily priorities, post it to #ecd-standup, and write the returned state back. Any DoR nudges that post to Jira go through the write-gate (propose first). Close the loop on yesterday's action_items.",
+        "timeoutSeconds": 900
+      },
+      "delivery": { "mode": "none", "channel": "slack", "to": "channel:REPLACE_ECD_STANDUP", "bestEffort": false },
+      "deleteAfterRun": false
+    },
+    {
+      "id": "pm-blocked-analysis",
+      "agentId": "pm",
+      "name": "blocked-analysis",
+      "description": "Daily blocked-ticket decision-tree analysis + digest",
+      "enabled": false,
+      "createdAtMs": 1782000000000,
+      "updatedAtMs": 1782000000000,
+      "schedule": { "kind": "cron", "expr": "0 10 * * 1-5", "tz": "America/New_York", "staggerMs": 60000 },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Run blocked-ticket analysis. Read tasks/blocked-analysis.md and execute it: read the `blocked` block from STATE.md, call pm.blocked_analysis(prior_state=<that block>), triage the returned comment threads yourself (still-blocked / resumed / response-needed), post the digest to #blocked-tickets, and write state back. Any Jira comment goes through the write-gate.",
+        "timeoutSeconds": 900
+      },
+      "delivery": { "mode": "none", "channel": "slack", "to": "channel:REPLACE_BLOCKED_TICKETS", "bestEffort": false },
+      "deleteAfterRun": false
+    },
+    {
+      "id": "pm-timesheet",
+      "agentId": "pm",
+      "name": "timesheet",
+      "description": "Weekly timesheet/worklog: hours vs estimates, over-estimate flags",
+      "enabled": false,
+      "createdAtMs": 1782000000000,
+      "updatedAtMs": 1782000000000,
+      "schedule": { "kind": "cron", "expr": "30 9 * * 1", "tz": "America/New_York", "staggerMs": 60000 },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Run the weekly timesheet report. Read tasks/timesheet.md and execute it: call pm.timesheet(week_offset=0) for last complete week, format the per-developer hours-vs-estimate digest, and post to #timesheets.",
+        "timeoutSeconds": 600
+      },
+      "delivery": { "mode": "none", "channel": "slack", "to": "channel:REPLACE_TIMESHEETS", "bestEffort": false },
+      "deleteAfterRun": false
+    },
+    {
+      "id": "pm-portfolio-audit",
+      "agentId": "pm",
+      "name": "portfolio-audit",
+      "description": "Weekly portfolio health: 7 initiative/epic hygiene signals",
+      "enabled": false,
+      "createdAtMs": 1782000000000,
+      "updatedAtMs": 1782000000000,
+      "schedule": { "kind": "cron", "expr": "45 9 * * 1", "tz": "America/New_York", "staggerMs": 60000 },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Run the portfolio health audit. Read tasks/portfolio-audit.md and execute it: read the `initiatives` block from STATE.md, call pm.portfolio_audit(prior_state=<that block>), post the findings + trend to #portfolio-health, and write state back.",
+        "timeoutSeconds": 600
+      },
+      "delivery": { "mode": "none", "channel": "slack", "to": "channel:REPLACE_PORTFOLIO_HEALTH", "bestEffort": false },
+      "deleteAfterRun": false
+    },
+    {
+      "id": "pm-self-audit",
+      "agentId": "pm",
+      "name": "pm-self-audit",
+      "description": "Weekly PM self-audit scorecard (approximates sprint-close); feeds reflection",
+      "enabled": false,
+      "createdAtMs": 1782000000000,
+      "updatedAtMs": 1782000000000,
+      "schedule": { "kind": "cron", "expr": "0 16 * * 5", "tz": "America/New_York", "staggerMs": 60000 },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Run the PM self-audit. Read tasks/pm-self-audit.md and execute it: call pm.pm_audit(pm_account_id=<Remington's/PM accountId>) for the active sprint, record the scorecard in the `self_audit` STATE.md block, and post a brief self-assessment to #pm-agent-logs. This feeds the weekly reflection. NOTE: schedule approximates sprint-close via Friday 16:00 — revisit once a real sprint-close trigger exists.",
+        "timeoutSeconds": 600
+      },
+      "delivery": { "mode": "none", "channel": "slack", "to": "channel:REPLACE_PM_AGENT_LOGS", "bestEffort": false },
+      "deleteAfterRun": false
+    },
+    {
+      "id": "pm-db-cleanup",
+      "agentId": "pm",
+      "name": "db-cleanup",
+      "description": "Housekeeping — checkpoint/retention pruning (mostly obsolete post-STATE.md)",
+      "enabled": false,
+      "createdAtMs": 1782000000000,
+      "updatedAtMs": 1782000000000,
+      "schedule": { "kind": "cron", "expr": "0 3 * * *", "tz": "America/New_York", "staggerMs": 0 },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "Run housekeeping. Read tasks/db-cleanup.md and execute it. In the OpenClaw world most old DB retention is obsolete (state lives in STATE.md); prune STATE.md of resolved entries and trim episodic memory if needed. Stay silent unless something needed attention.",
+        "timeoutSeconds": 300
+      },
+      "delivery": { "mode": "none", "channel": "slack", "to": "channel:REPLACE_PM_AGENT_LOGS", "bestEffort": true },
+      "deleteAfterRun": false
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "_comment": "Fragments to merge into the gateway's ~/.openclaw/openclaw.json. NEVER commit real tokens — placeholders (<...>) are filled at deploy time from the gateway environment / secret store. Back up openclaw.json before editing, then restart openclaw-gateway.service.",
+
+  "agents.list[] (append this object)": {
+    "id": "pm",
+    "name": "Remington",
+    "workspace": "/home/ethand320/.openclaw/workspace-pm",
+    "agentDir": "/home/ethand320/.openclaw/agents/pm/agent",
+    "model": "anthropic/claude-sonnet-4-6",
+    "identity": { "name": "Remington", "emoji": "📋" },
+    "tools": {
+      "allow": [
+        "read", "write", "edit", "exec",
+        "memory_search", "memory_get",
+        "sessions_spawn", "session_status"
+      ],
+      "deny": ["apply_patch", "cron", "gateway"]
+    }
+  },
+
+  "mcp.servers (add these two keys)": {
+    "trinity": {
+      "command": "/home/ethand320/code/citemed/project-manager/.venv-remington/bin/python",
+      "args": ["-m", "remington_mcp.trinity_mcp"],
+      "cwd": "/home/ethand320/code/citemed/project-manager/openclaw",
+      "env": {
+        "ATLASSIAN_EMAIL": "<from-secret>",
+        "ATLASSIAN_API_TOKEN": "<from-secret>",
+        "BITBUCKET_WORKSPACE": "<from-secret-or-trinity-config>",
+        "BITBUCKET_USERNAME": "<from-secret>",
+        "BITBUCKET_APP_PASSWORD": "<from-secret>"
+      }
+    },
+    "pm": {
+      "command": "/home/ethand320/code/citemed/project-manager/.venv-remington/bin/python",
+      "args": ["-m", "remington_mcp.pm_mcp"],
+      "cwd": "/home/ethand320/code/citemed/project-manager/openclaw",
+      "env": {
+        "ATLASSIAN_EMAIL": "<from-secret>",
+        "ATLASSIAN_API_TOKEN": "<from-secret>",
+        "ATLASSIAN_PROJECT_KEY": "ECD",
+        "ATLASSIAN_CLOUD_ID": "67bbfd03-b309-414f-9640-908213f80628",
+        "JIRA_INSTANCE_URL": "https://citemed.atlassian.net",
+        "BUSINESS_HOURS_START": "9",
+        "BUSINESS_HOURS_END": "17",
+        "BUSINESS_TIMEZONE": "America/New_York"
+      }
+    }
+  },
+
+  "channels.slack.accounts (add this key — requires a Slack app for Remington)": {
+    "remington": {
+      "botToken": "<xoxb-... from Remington's Slack app>",
+      "appToken": "<xapp-... from Remington's Slack app>",
+      "streaming": { "mode": "partial" }
+    }
+  },
+
+  "bindings[] (append this object)": {
+    "agentId": "pm",
+    "match": { "channel": "slack", "accountId": "remington" }
+  },
+
+  "also register the two MCP tool names per agent": "In agents.list[] for id 'pm', the trinity_/pm_ tools become available once mcp.servers is set; if the gateway requires explicit tool allow-listing for MCP tools (as with Sergei's dataforseo__/gsc__), add the trinity and pm tool names to tools.allow. Otherwise MCP tools are auto-exposed."
+}
