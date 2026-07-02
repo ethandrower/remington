@@ -21,13 +21,19 @@ from openclaw-hq. Every external write goes through propose → approve → exec
 
 | # | Step | What | Status |
 |---|---|---|---|
-| 1 | **trinity-mcp** | Wrap the existing `trinity` CLI as an MCP server (Bitbucket + headless token auth are the gaps the official Atlassian MCP can't fill). *Walking skeleton — unblocks everything, useful to Claude Code today.* | ☐ not started |
-| 2 | **pm_core** | Extract SLA / blocked / portfolio / timesheet / priorities / audit logic out of `scripts/core/*` into pure functions that return data (no Slack/DB side effects). The one unavoidable refactor. | ☐ not started |
-| 3 | **pm-mcp** | Compose `pm_core` into tools + `draft_ticket` / `lint_ticket` standards gate. | ☐ not started |
-| 4 | **OC workspace** | Author `SOUL.md` / `AGENTS.md` / `MEMORY.md`; port skills from `.claude/skills` + `.claude/procedures`; wire cron (standup, hourly SLA, weekly timesheet, portfolio) + standing orders. | ☐ card done; bootstrap files pending |
-| 5 | **Reactive cutover** | Jira/BB/Confluence outbound webhooks → `/hooks/agent`; delete the 4 pollers + processed-message tables; park `pm_agent_service.py`. | ☐ not started |
+| 1 | **trinity-mcp** | Wrap the `trinity` package as an MCP server (30 Jira/Confluence/Bitbucket tools, headless token auth). | ✅ built (`remington_mcp/trinity_mcp.py`); imports + authenticates live on oc-prod |
+| 2 | **pm_core** | Extract SLA / blocked / portfolio / timesheet / priorities / audit logic out of `scripts/core/*` into pure functions that return data (no Slack/DB side effects). | ✅ built (`remington_mcp/pm_core/`); verified live vs real ECD data |
+| 3 | **pm-mcp** | Compose `pm_core` into MCP tools. | ✅ built (`remington_mcp/pm_mcp.py`, 7 tools); `sla_check`/`blocked_analysis`/`portfolio_audit`/`standup` return real data |
+| 4 | **OC workspace** | Author `SOUL/AGENTS/MEMORY/IDENTITY/USER/HEARTBEAT`; port skills; write cron + standing orders. | ✅ done — 6 bootstrap files, 7 skills, 7 task runbooks, `cron/jobs.json` |
+| 5 | **Deploy** | Register `pm` agent + MCP servers + Slack account in `openclaw.json`; stage workspace-pm; deploy cron. | ◑ agent+MCP+Slack registered & gateway restarted (Piper intact); cron deployed to `#pm-agent-logs` (consolidated), **staged disabled**; awaiting bot channel-invite to enable + smoke-test |
+| 6 | **Reactive cutover** | Jira/BB/Confluence outbound webhooks → `/hooks/agent`; delete the 4 pollers; park `pm_agent_service.py`. | ☐ not started (needs Atlassian-admin webhook config) |
 
-Steps 1 and 2 can run in parallel.
+Steps 1–4 complete; step 5 in flight (see `deploy/DEPLOY.md`). Deployed 2026-07-02.
+
+### Known follow-ups
+- `timesheet` returned `developers:0` for the last complete week on live data — verify the worklog query (may be legitimately empty, or a field/date issue in `pm_core/timesheet.py`).
+- `pm_core/sla.py` `_check_pr_slas` still stubbed (Bitbucket PR staleness) — `TODO(port)`.
+- Real per-channel Slack IDs pending (currently consolidated to `#pm-agent-logs`); split out once the 7 channels exist.
 
 ## Source → destination map (the IP that moves)
 
