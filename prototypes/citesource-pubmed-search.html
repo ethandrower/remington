@@ -1,0 +1,428 @@
+<title>CiteSource — PubMed search tab prototype</title>
+<style>
+  :root{
+    --bg:#f1f3f5; --surface:#ffffff; --surface-2:#f9fafb;
+    --border:#e4e7ec; --border-strong:#d0d5dd;
+    --text:#101828; --muted:#667085; --faint:#98a2b3;
+    --accent:#1d4ed8; --accent-hover:#1a43b8; --accent-soft:#eff4ff; --accent-border:#c7d7fe;
+    --free-fg:#067647; --free-bg:#ecfdf3; --free-bd:#abefc6;
+    --paid-fg:#b54708; --paid-bg:#fffaeb; --paid-bd:#fedf89;
+    --none-fg:#667085; --none-bg:#f2f4f7; --none-bd:#e4e7ec;
+    --shadow:0 1px 2px rgba(16,24,40,.06);
+    --radius:8px;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,system-ui,sans-serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0d1117; --surface:#161b22; --surface-2:#1c222b;
+      --border:#2a313c; --border-strong:#3a424f;
+      --text:#e6edf3; --muted:#9198a1; --faint:#6e7681;
+      --accent:#4d7cfe; --accent-hover:#6b91ff; --accent-soft:#182338; --accent-border:#2d4270;
+      --free-fg:#5fd39a; --free-bg:#0e2a1d; --free-bd:#1c4a34;
+      --paid-fg:#f5b544; --paid-bg:#2e2110; --paid-bd:#5a4218;
+      --none-fg:#9198a1; --none-bg:#20262e; --none-bd:#2a313c;
+      --shadow:0 1px 2px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0d1117; --surface:#161b22; --surface-2:#1c222b;
+    --border:#2a313c; --border-strong:#3a424f;
+    --text:#e6edf3; --muted:#9198a1; --faint:#6e7681;
+    --accent:#4d7cfe; --accent-hover:#6b91ff; --accent-soft:#182338; --accent-border:#2d4270;
+    --free-fg:#5fd39a; --free-bg:#0e2a1d; --free-bd:#1c4a34;
+    --paid-fg:#f5b544; --paid-bg:#2e2110; --paid-bd:#5a4218;
+    --none-fg:#9198a1; --none-bg:#20262e; --none-bd:#2a313c;
+    --shadow:0 1px 2px rgba(0,0,0,.4);
+  }
+  :root[data-theme="light"]{
+    --bg:#f1f3f5; --surface:#ffffff; --surface-2:#f9fafb;
+    --border:#e4e7ec; --border-strong:#d0d5dd;
+    --text:#101828; --muted:#667085; --faint:#98a2b3;
+    --accent:#1d4ed8; --accent-hover:#1a43b8; --accent-soft:#eff4ff; --accent-border:#c7d7fe;
+    --free-fg:#067647; --free-bg:#ecfdf3; --free-bd:#abefc6;
+    --paid-fg:#b54708; --paid-bg:#fffaeb; --paid-bd:#fedf89;
+    --none-fg:#667085; --none-bg:#f2f4f7; --none-bd:#e4e7ec;
+    --shadow:0 1px 2px rgba(16,24,40,.06);
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);
+       font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1240px;margin:0 auto;padding:20px 24px 64px}
+
+  .note{display:flex;gap:10px;align-items:flex-start;background:var(--accent-soft);
+        border:1px solid var(--accent-border);border-radius:var(--radius);
+        padding:11px 14px;margin-bottom:20px;color:var(--text);font-size:13px}
+  .note b{font-weight:600}
+  .note p{margin:0}
+
+  .crumb{display:flex;align-items:center;gap:8px;margin-bottom:16px;font-size:15px}
+  .crumb .c1{color:var(--muted)}
+  .crumb .sep{color:var(--faint)}
+  .crumb .c2{font-weight:600}
+  .crumb .spacer{flex:1}
+
+  .toolbar{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+  .search{position:relative;flex:0 0 300px}
+  .search input{width:100%;height:36px;padding:0 34px 0 12px;border:1px solid var(--border-strong);
+    border-radius:6px;background:var(--surface);color:var(--text);font:inherit;font-size:13px}
+  .search input:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:var(--accent)}
+  .search svg{position:absolute;right:10px;top:9px;color:var(--faint)}
+  .toolbar .spacer{flex:1}
+
+  .btn{height:36px;padding:0 12px;border:1px solid var(--border-strong);background:var(--surface);
+       color:var(--text);border-radius:6px;font:inherit;font-size:13px;font-weight:500;cursor:pointer;
+       display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+  .btn:hover{background:var(--surface-2)}
+  .btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.primary:hover{background:var(--accent-hover)}
+  .btn.sm{height:28px;padding:0 10px;font-size:12px}
+  .btn.ghost{border-color:transparent;background:transparent;color:var(--muted)}
+  .btn.ghost:hover{background:var(--surface-2);color:var(--text)}
+  .btn[disabled]{opacity:.5;cursor:not-allowed}
+
+  /* ---- the tab strip: the one structural addition ---- */
+  .tabs{display:flex;align-items:flex-end;gap:2px;border-bottom:1px solid var(--border);margin-bottom:-1px;position:relative;z-index:1}
+  .tab{appearance:none;border:1px solid transparent;border-bottom:none;background:transparent;
+       color:var(--muted);font:inherit;font-size:13px;font-weight:500;cursor:pointer;
+       padding:9px 14px;border-radius:8px 8px 0 0;display:flex;align-items:center;gap:8px;
+       margin-bottom:1px}
+  .tab:hover{color:var(--text);background:var(--surface-2)}
+  .tab:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+  .tab[aria-selected="true"]{background:var(--surface);border-color:var(--border);
+       color:var(--text);font-weight:600;margin-bottom:-1px;padding-bottom:10px}
+  .count{font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;
+         background:var(--none-bg);color:var(--muted);border:1px solid var(--none-bd);
+         border-radius:20px;padding:1px 7px;min-width:20px;text-align:center}
+  .tab[aria-selected="true"] .count{background:var(--accent-soft);color:var(--accent);border-color:var(--accent-border)}
+  .count.loading{color:var(--faint);font-weight:400}
+
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+        box-shadow:var(--shadow);overflow:hidden}
+
+  .banner{display:flex;align-items:center;gap:10px;padding:10px 16px;font-size:12.5px;
+          background:var(--surface-2);border-bottom:1px solid var(--border);color:var(--muted);flex-wrap:wrap}
+  .banner strong{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
+  .banner .spacer{flex:1}
+  .banner a{color:var(--accent);text-decoration:none;font-weight:500}
+  .banner a:hover{text-decoration:underline}
+
+  table{width:100%;border-collapse:collapse}
+  thead th{background:var(--surface-2);border-bottom:1px solid var(--border);
+    text-align:left;padding:9px 16px;font-size:12.5px;font-weight:600;color:var(--muted)}
+  thead th.chk,tbody td.chk{width:44px;padding-left:16px;padding-right:0}
+  thead th .count{margin-left:8px}
+  tbody td{border-bottom:1px solid var(--border);padding:13px 16px;vertical-align:top}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:var(--surface-2)}
+  input[type=checkbox]{width:15px;height:15px;accent-color:var(--accent);cursor:pointer;margin:2px 0 0}
+
+  .title{font-weight:600;font-size:13.5px;line-height:1.45;margin:0 0 5px;color:var(--text);text-wrap:pretty}
+  .meta{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)}
+  .meta .dot{color:var(--faint)}
+  .meta .ids{font-variant-numeric:tabular-nums;color:var(--faint);font-size:12px}
+  .row-main{display:flex;gap:16px;align-items:flex-start}
+  .row-main .grow{flex:1;min-width:0}
+  .row-actions{display:flex;align-items:center;gap:8px;flex-shrink:0;padding-top:1px}
+
+  .badge{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;
+         border-radius:5px;padding:2px 7px;border:1px solid;white-space:nowrap}
+  .badge .pip{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}
+  .badge.free{color:var(--free-fg);background:var(--free-bg);border-color:var(--free-bd)}
+  .badge.paid{color:var(--paid-fg);background:var(--paid-bg);border-color:var(--paid-bd)}
+  .badge.none{color:var(--none-fg);background:var(--none-bg);border-color:var(--none-bd)}
+  .badge.inlib{color:var(--accent);background:var(--accent-soft);border-color:var(--accent-border)}
+  .badge.skel{color:transparent;background:var(--none-bg);border-color:var(--none-bd);
+              width:104px;height:20px;animation:pulse 1.2s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:.45}50%{opacity:.9}}
+  @media (prefers-reduced-motion:reduce){.badge.skel{animation:none}}
+
+  .foot{display:flex;align-items:center;justify-content:center;gap:6px;padding:14px 16px;
+        border-top:1px solid var(--border);position:relative;background:var(--surface)}
+  .foot .right{position:absolute;right:16px;font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .page{width:30px;height:30px;border:1px solid var(--border-strong);background:var(--surface);
+        border-radius:6px;color:var(--text);font:inherit;font-size:12.5px;cursor:pointer}
+  .page[aria-current="true"]{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .foot .cap{color:var(--muted);font-size:12.5px;text-align:center}
+  .foot .cap b{color:var(--text);font-variant-numeric:tabular-nums}
+
+  /* empty library state — the PubMed CTA gets promoted here */
+  .empty{padding:44px 24px;text-align:center}
+  .empty h3{margin:0 0 6px;font-size:15px;font-weight:600}
+  .empty p{margin:0 0 18px;color:var(--muted);font-size:13px}
+  .empty .q{color:var(--text);font-weight:600}
+
+  .bulkbar{display:flex;align-items:center;gap:12px;padding:9px 16px;background:var(--accent-soft);
+           border-bottom:1px solid var(--accent-border);font-size:12.5px;font-weight:500}
+  .bulkbar .spacer{flex:1}
+  [hidden]{display:none !important}
+
+  .legend{margin-top:22px;padding:16px 18px;background:var(--surface);border:1px solid var(--border);
+          border-radius:var(--radius);font-size:12.5px;color:var(--muted)}
+  .legend h4{margin:0 0 10px;font-size:12px;font-weight:600;color:var(--text);
+             text-transform:uppercase;letter-spacing:.05em}
+  .legend ul{margin:0;padding-left:18px;display:grid;gap:5px}
+  .legend code{background:var(--surface-2);border:1px solid var(--border);border-radius:4px;
+               padding:1px 5px;font-size:11.5px}
+</style>
+
+<div class="wrap">
+  <div class="note">
+    <p><b>Prototype.</b> Chrome matches the current Reference&nbsp;Library. The <b>PubMed</b> tab holds
+    20 real records captured live from <code>esearch(sort=relevance)</code> → <code>esummary</code> for
+    “hospital” — real titles, DOIs and PMCIDs. Search filters the library only; the PubMed rows are canned.
+    Try clearing the box or typing something with no library hits to see the empty state.</p>
+  </div>
+
+  <div class="crumb">
+    <span class="c1">Cite Source</span><span class="sep">›</span><span class="c2">Reference Library</span>
+    <span class="spacer"></span>
+    <button class="btn primary">+ Add Reference</button>
+  </div>
+
+  <div class="toolbar">
+    <label class="search">
+      <input id="q" value="hospital" aria-label="Search references" autocomplete="off" />
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    </label>
+    <button class="btn">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg> Filters
+    </button>
+    <span class="spacer"></span>
+    <button class="btn">Clear Filters</button>
+    <button class="btn">Add Reference</button>
+    <button class="btn" id="colBtn">+ Add a column</button>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" id="tab-lib" aria-selected="true" aria-controls="panel-lib">
+      My Library <span class="count" id="libCount">1</span>
+    </button>
+    <button class="tab" role="tab" id="tab-pm" aria-selected="false" aria-controls="panel-pm">
+      PubMed <span class="count" id="pmCount">8,565,868</span>
+    </button>
+  </div>
+
+  <!-- LIBRARY -->
+  <div class="card" id="panel-lib" role="tabpanel" aria-labelledby="tab-lib">
+    <div id="libTable">
+      <table>
+        <thead><tr>
+          <th class="chk"><input type="checkbox" aria-label="Select all" /></th>
+          <th>Article <span class="count">1</span></th>
+        </tr></thead>
+        <tbody><tr>
+          <td class="chk"><input type="checkbox" aria-label="Select row" /></td>
+          <td>
+            <div class="row-main">
+              <div class="grow">
+                <p class="title">Hospitalization of Symptomatic Patients With Heart Failure and Moderate to
+                  Severe Functional Mitral Regurgitation Treated With MitraClip: Insights From RESHAPE-HF2</p>
+                <div class="meta">
+                  <span>Ponikowski P et al. (+4)</span><span class="dot">·</span><span>2024</span>
+                  <span class="dot">·</span><span>Full Text Available</span>
+                </div>
+              </div>
+              <div class="row-actions"><button class="btn ghost sm" aria-label="More">···</button></div>
+            </div>
+          </td>
+        </tr></tbody>
+      </table>
+      <div class="foot">
+        <button class="page" aria-label="Previous">‹</button>
+        <button class="page" aria-current="true">1</button>
+        <button class="page" aria-label="Next">›</button>
+        <span class="right">1-1 of 1</span>
+      </div>
+    </div>
+
+    <div id="libEmpty" hidden>
+      <div class="empty">
+        <h3>No references in your library match <span class="q" id="emptyQ"></span></h3>
+        <p>It may still be in the published literature.</p>
+        <button class="btn primary" id="goPubmed">Search PubMed for <span id="emptyQ2"></span> →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PUBMED -->
+  <div class="card" id="panel-pm" role="tabpanel" aria-labelledby="tab-pm" hidden>
+    <div class="banner">
+      <span><strong id="pmHits">8,565,868</strong> results on PubMed for “<span id="pmQ">hospital</span>” —
+        showing the <strong>20</strong> best matches.</span>
+      <span class="spacer"></span>
+      <span>Narrow with Filters, or</span>
+      <a href="#" id="pmOut">open this search on PubMed ↗</a>
+    </div>
+
+    <div class="bulkbar" id="bulk" hidden>
+      <span><b id="bulkN">0</b> selected</span>
+      <span class="spacer"></span>
+      <button class="btn sm" id="bulkClear">Clear</button>
+      <button class="btn primary sm" id="bulkAdd">Add selected to library</button>
+    </div>
+
+    <table>
+      <thead><tr>
+        <th class="chk"><input type="checkbox" id="pmAll" aria-label="Select all" /></th>
+        <th>Article <span class="count">20</span></th>
+      </tr></thead>
+      <tbody id="pmBody"></tbody>
+    </table>
+
+    <div class="foot">
+      <div class="cap">
+        Showing the top <b>20</b> of <b>8,565,868</b>. Refine your search to surface different papers —
+        CiteSource doesn’t page deeper.
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <h4>What each availability badge costs you</h4>
+    <ul>
+      <li><span class="badge free"><span class="pip"></span>Free full text</span> — PMCID was already in the
+        <code>esummary</code> response. Zero extra API calls. 9 of these 20 rows.</li>
+      <li><span class="badge paid"><span class="pip"></span>Article Galaxy · $35</span> — hydrated by
+        <b>one</b> batched <code>POST /publications/availability</code> for the visible DOIs.
+        AG batches at ≤25; a page is 20. One call per page.</li>
+      <li><span class="badge none"><span class="pip"></span>Not available</span> — metadata-only add.</li>
+      <li><span class="badge inlib"><span class="pip"></span>In your library</span> — deduped server-side on
+        DOI with a PMID fallback, in the same round trip. Renders on first paint, no flicker.</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+const PAPERS = [
+{pmid:"37811704",doi:"10.1111/dme.15236",pmcid:null,title:"Hospital admissions among people with diabetes: A systematic review",au:"Feleke BE",n:6,j:"Diabet Med",y:"2024"},
+{pmid:"38573951",doi:"10.12968/jowc.2024.33.Sup4.S14",pmcid:null,title:"Hospital-acquired pressure injury: our seven years of experience",au:"Oztas P",n:4,j:"J Wound Care",y:"2024"},
+{pmid:"34360462",doi:"10.3390/ijerph18158167",pmcid:"PMC8346045",title:"Hospital Inpatient Falls across Clinical Departments",au:"Mikos M",n:6,j:"Int J Environ Res Public Health",y:"2021"},
+{pmid:"36661192",doi:"10.1111/jgs.18238",pmcid:"PMC10976455",title:"Hospital-associated disability due to avoidable hospitalizations among older adults",au:"Skains RM",n:9,j:"J Am Geriatr Soc",y:"2023"},
+{pmid:"36163662",doi:"10.5588/ijtld.21.0695",pmcid:null,title:"Community- vs. hospital-based management of multidrug-resistant TB in Pakistan",au:"Fatima R",n:15,j:"Int J Tuberc Lung Dis",y:"2022"},
+{pmid:"39497540",doi:"10.1542/hpeds.2024-007874",pmcid:null,title:"Pediatric Hospital Utilization During Medical Stabilization for Patients With Eating Disorders",au:"Milliren CE",n:5,j:"Hosp Pediatr",y:"2024"},
+{pmid:"39515918",doi:"10.1016/j.soin.2024.09.018",pmcid:null,title:"[Appropriation of thought, space and subjectivity for hospital care]",au:"Periano C",n:1,j:"Soins",y:"2024"},
+{pmid:"34185827",doi:"10.1093/ageing/afab126",pmcid:"PMC8753041",title:"External validation of the Hospital Frailty Risk Score in France",au:"Gilbert T",n:8,j:"Age Ageing",y:"2022"},
+{pmid:"27294595",doi:"10.1001/jamainternmed.2016.2737",pmcid:"PMC4955877",title:"Hospital Prescribing of Opioids to Medicare Beneficiaries",au:"Jena AB",n:3,j:"JAMA Intern Med",y:"2016"},
+{pmid:"37306096",doi:"10.1177/02692163231180912",pmcid:"PMC10503248",title:"Hospital-service use in the last year of life by patients aged ⩾60 years who died of heart failure or cardiomyopathy: A retrospective linked data study",au:"Singh GK",n:7,j:"Palliat Med",y:"2023"},
+{pmid:"35581158",doi:"10.1093/ageing/afac098",pmcid:"PMC9113942",title:"Patterns of unplanned hospital admissions among people with dementia: from diagnosis to the end of life",au:"Yorganci E",n:4,j:"Age Ageing",y:"2022"},
+{pmid:"37553153",doi:"10.1093/ehjqcco/qcad047",pmcid:null,title:"Hospital admissions in the last year of life of patients with heart failure",au:"Abel AAI",n:9,j:"Eur Heart J Qual Care Clin Outcomes",y:"2024"},
+{pmid:"35535935",doi:"10.1002/jhm.12811",pmcid:null,title:"Hospital's observed specific standard practice: A novel measure of variation in care for common inpatient pediatric conditions",au:"Bakel LA",n:9,j:"J Hosp Med",y:"2022"},
+{pmid:"36356268",doi:"10.26635/6965.5353",pmcid:null,title:"Understanding the context of hospital transfers and away-from-home hospitalisations for Māori",au:"Cormack D",n:5,j:"N Z Med J",y:"2022"},
+{pmid:"34075581",doi:"10.1111/1475-6773.13677",pmcid:"PMC9108072",title:"High-frequency hospital users: The tail that wags the readmissions dog",au:"Fouayzi H",n:2,j:"Health Serv Res",y:"2022"},
+{pmid:"36399205",doi:"10.1007/s00228-022-03419-7",pmcid:null,title:"Impact of suspected adverse drug reactions on mortality and length of hospital stay in the hospitalised patients: a meta-analysis",au:"Patel TK",n:6,j:"Eur J Clin Pharmacol",y:"2023"},
+{pmid:"35085317",doi:"10.1371/journal.pone.0262815",pmcid:"PMC8794195",title:"Hidden chaos factors inducing random walks which reduce hospital operative efficiency",au:"Rodríguez-Hernández AJ",n:2,j:"PLoS One",y:"2022"},
+{pmid:"35718567",doi:"10.1016/j.injury.2022.06.021",pmcid:null,title:"Hospital service use following an injury hospitalisation for young males and females in a population-level matched retrospective cohort study",au:"Cameron CM",n:4,j:"Injury",y:"2022"},
+{pmid:"29090498",doi:"10.1111/1471-0528.15007",pmcid:null,title:"Hospital variation in cost of childbirth and contributing factors: a cross-sectional study",au:"Xu X",n:7,j:"BJOG",y:"2018"},
+{pmid:"37149604",doi:"10.1186/s12902-023-01352-z",pmcid:"PMC10163802",title:"Diabetes mellitus-related hospital admissions and prescriptions of antidiabetic agents in England and Wales: an ecological study",au:"AbuHammad GAR",n:3,j:"BMC Endocr Disord",y:"2023"}
+];
+
+// One row is already in the library, to show the dedupe state.
+const IN_LIBRARY = new Set(["10.3390/ijerph18158167"]);
+// Stand-in for the batched AG availability response (unavailable + priced).
+const AG_NONE = new Set(["10.26635/6965.5353","10.5588/ijtld.21.0695"]);
+const AG_PRICE = {"10.1111/dme.15236":41,"10.12968/jowc.2024.33.Sup4.S14":35,"10.1542/hpeds.2024-007874":38,
+  "10.1016/j.soin.2024.09.018":29,"10.1093/ehjqcco/qcad047":45,"10.1002/jhm.12811":35,
+  "10.1007/s00228-022-03419-7":39,"10.1016/j.injury.2022.06.021":35,"10.1111/1471-0528.15007":42};
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const added = new Set();
+
+function badgeFor(p){
+  if (IN_LIBRARY.has(p.doi) || added.has(p.pmid))
+    return '<span class="badge inlib"><span class="pip"></span>In your library</span>';
+  if (p.pmcid) return '<span class="badge free"><span class="pip"></span>Free full text</span>';
+  if (AG_NONE.has(p.doi)) return '<span class="badge none"><span class="pip"></span>Not available</span>';
+  if (AG_PRICE[p.doi]) return `<span class="badge paid"><span class="pip"></span>Article Galaxy · $${AG_PRICE[p.doi]}</span>`;
+  return '<span class="badge skel" aria-label="Checking availability"></span>';
+}
+function actionFor(p){
+  if (IN_LIBRARY.has(p.doi) || added.has(p.pmid))
+    return '<button class="btn ghost sm" disabled>Added</button>';
+  if (p.pmcid) return `<button class="btn sm add" data-pmid="${p.pmid}">+ Add</button>`;
+  if (AG_NONE.has(p.doi)) return `<button class="btn sm add" data-pmid="${p.pmid}">+ Metadata</button>`;
+  return `<button class="btn sm add" data-pmid="${p.pmid}">+ Order</button>`;
+}
+function render(){
+  $('#pmBody').innerHTML = PAPERS.map(p => `
+    <tr>
+      <td class="chk"><input type="checkbox" class="pick" data-pmid="${p.pmid}" aria-label="Select" /></td>
+      <td><div class="row-main">
+        <div class="grow">
+          <p class="title">${esc(p.title)}</p>
+          <div class="meta">
+            <span>${esc(p.au)}${p.n > 1 ? ` et al. (+${p.n - 1})` : ''}</span><span class="dot">·</span>
+            <span>${p.y}</span><span class="dot">·</span><span>${esc(p.j)}</span><span class="dot">·</span>
+            <span class="ids">PMID ${p.pmid}</span>
+          </div>
+        </div>
+        <div class="row-actions">${badgeFor(p)}${actionFor(p)}</div>
+      </div></td>
+    </tr>`).join('');
+  bindRows();
+}
+function bindRows(){
+  document.querySelectorAll('.add').forEach(b => b.onclick = () => {
+    added.add(b.dataset.pmid);
+    $('#libCount').textContent = 1 + added.size;
+    render(); syncBulk();
+  });
+  document.querySelectorAll('.pick').forEach(c => c.onchange = syncBulk);
+}
+function syncBulk(){
+  const n = document.querySelectorAll('.pick:checked').length;
+  $('#bulk').hidden = n === 0;
+  $('#bulkN').textContent = n;
+}
+$('#pmAll').onchange = e => {
+  document.querySelectorAll('.pick').forEach(c => c.checked = e.target.checked);
+  syncBulk();
+};
+$('#bulkClear').onclick = () => {
+  document.querySelectorAll('.pick').forEach(c => c.checked = false);
+  $('#pmAll').checked = false; syncBulk();
+};
+$('#bulkAdd').onclick = () => {
+  document.querySelectorAll('.pick:checked').forEach(c => added.add(c.dataset.pmid));
+  $('#libCount').textContent = 1 + added.size;
+  $('#pmAll').checked = false; render(); syncBulk();
+};
+
+function selectTab(which){
+  const lib = which === 'lib';
+  $('#tab-lib').setAttribute('aria-selected', lib);
+  $('#tab-pm').setAttribute('aria-selected', !lib);
+  $('#panel-lib').hidden = !lib;
+  $('#panel-pm').hidden = lib;
+}
+$('#tab-lib').onclick = () => selectTab('lib');
+$('#tab-pm').onclick  = () => selectTab('pm');
+$('#goPubmed').onclick = () => selectTab('pm');
+
+// Library search is instant and local. The PubMed count is a debounced count-only
+// probe (~1s in real life) — never fired per keystroke.
+let timer;
+$('#q').addEventListener('input', e => {
+  const q = e.target.value.trim();
+  const hit = q !== '' && 'hospitalization of symptomatic patients with heart failure mitraclip reshape-hf2'
+                            .includes(q.toLowerCase());
+  $('#libTable').hidden = !hit;
+  $('#libEmpty').hidden = hit;
+  $('#libCount').textContent = hit ? 1 + added.size : added.size;
+  $('#emptyQ').textContent = $('#emptyQ2').textContent = q ? `“${q}”` : 'your search';
+  $('#pmQ').textContent = q || 'hospital';
+  $('#pmOut').href = 'https://pubmed.ncbi.nlm.nih.gov/?term=' + encodeURIComponent(q || 'hospital');
+
+  clearTimeout(timer);
+  const c = $('#pmCount'); c.classList.add('loading'); c.textContent = '…';
+  timer = setTimeout(() => {
+    c.classList.remove('loading');
+    c.textContent = q ? (8565868).toLocaleString() : (8565868).toLocaleString();
+  }, 700);
+});
+render();
+</script>
