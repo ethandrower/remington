@@ -216,6 +216,9 @@ You have access to specialized skills in `.claude/skills/`:
 2. **jira-best-practices/** - Ticket formatting, workflow guidance
 3. **team-communication/** - Slack messaging, escalation templates
 4. **sla-enforcement/** - SLA logic, escalation decision trees
+5. **board-hygiene/** - Board decay patterns: shipped-but-open work, orphans and
+   dead parents, duplicate twins, phantom keys. Detect and report only — never
+   close or reparent autonomously. Tooling: `src/tools/jira/board_hygiene.py`
 
 **Reference these before executing workflows to ensure best practices.**
 
