@@ -22,7 +22,7 @@ Medical PDF document parser + information extractor using LLMs. Python (Poetry/u
 - No `CLAUDE.md` yet — orient by reading `README.md` + `SCREENING_README.md`.
 - **AI-prefixed tickets / outcome-measure / screening work lives here.**
 
-### `trinity/` — Unified Atlassian CLI
+### `atlassian-trinity/` — Unified Atlassian CLI (dir name is `atlassian-trinity`)
 The CLI you're already using (`trinity jira|confluence|bb ...`). JSON-first, agent-native.
 - Source: `src/trinity/`
 - Installed binary: `/opt/homebrew/bin/trinity`
@@ -34,6 +34,15 @@ Older Bitbucket CLI. Trinity's `bb` subcommands largely supersede this for PM us
 
 ### `hubspot-openclaw/`
 OpenClaw-compatible skill wrapping HubSpot CRM. Not a PM concern unless a ticket explicitly involves CRM data.
+
+---
+
+### `openclaw-hq/` — the agent fleet (at `~/code/openclaw-hq`, not under `citemed/`)
+**Remington's own OpenClaw definition lives here**, at `agents/remington/`:
+`CARD.md` · `BUILDOUT.md` · `workspace/` (SOUL/AGENTS/MEMORY/STATE, skills, tasks, cron)
+· `mcp/` (trinity-mcp + pm-mcp over `pm_core`). It was moved out of this repo's
+`openclaw/` dir on 2026-08-20 — see `ethandrower/remington` PR #14 for the history.
+Deploy runbook: `openclaw-hq/deploy/remington-deploy.md`.
 
 ---
 
